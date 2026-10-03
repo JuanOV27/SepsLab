@@ -1,0 +1,6 @@
+# PDFs fuente completos de los cuadernillos ICFES: no se redistribuyen en un repo público,
+# solo se usan localmente para extraer/transcribir preguntas e imágenes (ver docs/FUENTES.md).
+data-source/
+
+# Artefactos sueltos sin uso
+pyo

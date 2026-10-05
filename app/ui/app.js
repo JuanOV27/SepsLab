@@ -1371,7 +1371,7 @@ const key = currentRenderKey();
     }
     else if (action === "reward-continue") { pendingReward = null; state = { screen: "home" }; render(); return; }
     else if (action === "go-config") startModeConfig(actionEl.dataset.mode);
-    else if (action === "go-home") { state = { screen: storage.getCurrentUser() ? "home" : "login" }; render(); }
+    else if (action === "go-home") { state = { screen: "home" }; render(); }
     else if (action === "go-progress") { state = { screen: "progress" }; render(); }
     else if (action === "start-session") startSession();
     else if (action === "select-option") chooseOption(actionEl.dataset.value);
@@ -1504,7 +1504,7 @@ const key = currentRenderKey();
     root.addEventListener("submit", handleSubmit);
     // Si ya había sesión guardada, entrar directo; si no, pedir login.
     try {
-      state = { screen: storage.getCurrentUser() ? "home" : "login" };
+      state = { screen: "home" };
     } catch (err) {
       state = { screen: "login" };
     }

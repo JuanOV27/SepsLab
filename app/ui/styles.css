@@ -2178,14 +2178,18 @@ svg.input-ico {
 /* ---------- Responsive v5: móvil, tablet y desktop ---------- */
 html {
   -webkit-text-size-adjust: 100%;
-  /* Los adornos de fondo (los orbes difuminados del login y de la tarjeta) son
-     position: fixed y miden 380 px, más que un teléfono de 360. El overflow de un
-     ancestro NO recorta a un hijo fixed, por eso ponerlo en body no servía de
-     nada: la página se desplazaba de lado 129 px y en el teléfono se veía el
-     borde de un círculo de luz al deslizar. Tiene que ir en html, que es quien
-     recorta de verdad. Se usa clip y no hidden porque hidden convierte al
-     documento en contenedor de desplazamiento y el cronómetro pegado arriba
-     dejaría de pegarse. */
+}
+
+#app {
+  /* Los adornos de fondo del login (los orbes difuminados) miden 380 px y se
+     cuelgan 100 px por fuera del borde, pensados para una pantalla ancha. En un
+     teléfono de 360 eso empujaba la página 130 px de lado: aparecía el borde de
+     un círculo de luz y, al deslizar, se veía medio corte de él.
+     Se recorta aquí y no en html ni en body porque se probó y no surte efecto:
+     los adornos se dibujan fuera del flujo y html/body no los alcanzan. Y se usa
+     clip y no hidden porque hidden convierte el elemento en contenedor de
+     desplazamiento, y entonces el cronómetro pegado arriba dejaría de pegarse
+     (clip no crea contenedor). */
   overflow-x: clip;
 }
 

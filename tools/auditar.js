@@ -1,0 +1,198 @@
+// Verificación de los bancos de preguntas del proyecto SESP.
+//
+//   node tools/auditar.js
+//
+// Sin dependencias: usa el mismo motor de Node que ya está en la máquina.
+// Se ejecuta en dos bloques:
+//
+//  1. CLAVES CONTRA LOS PDF OFICIALES. Las tablas de abajo están transcritas de la
+//     sección "Información de cada pregunta" (RC, LC, CC, IN, FP, DS) y "Tabla de
+//     respuestas correctas" (PC 2026) de cada cuadernillo del ICFES, que se pueden
+//     volver a leer en data-source/ con:
+//       pdftotext -layout data-source/<módulo>/*.pdf -
+//     Si algún día se cambia una clave del banco, este script lo detecta; si se
+//     cambia una de estas tablas, hay que volver a copiarla del PDF.
+//
+//  2. COHERENCIA INTERNA DE LOS BANCOS: ids únicos y con prefijo coherente con su
+//     banco, correctOption dentro de las opciones, número de opciones que el examen
+//     real usa, competencia registrada en modules.js, contextId resoluble y
+//     coherente con appliesTo, imágenes referenciadas que existen en disco, y
+//     explicaciones presentes, sin huérfanas ni sospechosamente cortas.
+//
+// Sale con código 1 si algo falla, para poder encadenarlo en cualquier revisión.
+
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+const ROOT = path.resolve(__dirname, "..");
+const APP = path.join(ROOT, "app");
+
+// --------------------------------------------------------------------------------------
+// Claves oficiales, transcritas de los cuadernillos del ICFES (posición -> letra).
+// LC va de 1 a 26; la 15 está excluida del banco por contenido sensible.
+// --------------------------------------------------------------------------------------
+const CLAVES_OFICIALES = {
+  RC: "B C B C A C A A B B B D B B D B A B A B C D C B C".split(" "),
+  LC: "A B B D A C C A C B B D A B B C B B D D C B D D C B".split(" "),
+  CC: "D C D B D D B C B C D C A D C A D A B D A C A C D".split(" "),
+  IN: "F E B G H A B A C B B C B A A B C A B A B C A B A".split(" "),
+  FP: "A D C C D D D C A B A A B C B A B C C C B C".split(" "),
+  DS: "B D A C B D B A B D A C C B A D C B A B C A C B C".split(" "),
+  PC: "C C B A A A C B B B B C B B C B B C C B D A B D".split(" "),
+};
+
+// --------------------------------------------------------------------------------------
+// Carga de los bancos como lo haría el navegador (window.SESP.data).
+// --------------------------------------------------------------------------------------
+const ARCHIVOS = [
+  "data/modules.js",
+  "data/questions.rc.js", "data/questions.lc.js", "data/questions.cc.js",
+  "data/questions.in.js", "data/questions.ce.js", "data/questions.fp.js",
+  "data/questions.ds.js", "data/questions.pc.js",
+  "data/questions.gen.rc.js", "data/questions.gen.lc.js", "data/questions.gen.cc.js",
+  "data/questions.gen.in.js", "data/questions.gen.ce.js",
+  "data/explanations.js",
+];
+
+const sandbox = { window: {}, console };
+vm.createContext(sandbox);
+for (const archivo of ARCHIVOS) {
+  const codigo = fs.readFileSync(path.join(APP, archivo), "utf8");
+  try {
+    vm.runInContext(codigo, sandbox, { filename: archivo });
+  } catch (e) {
+    console.error(`No se pudo cargar ${archivo}: ${e.message}`);
+    process.exit(1);
+  }
+}
+const D = sandbox.window.SESP.data;
+
+const problemas = [];
+const avisos = [];
+
+// --------------------------------------------------------------------------------------
+// 1. Claves contra los PDF oficiales.
+// --------------------------------------------------------------------------------------
+console.log("1) Claves contra la tabla oficial de cada cuadernillo");
+for (const [modulo, oficial] of Object.entries(CLAVES_OFICIALES)) {
+  const banco = D.questions[modulo] || [];
+  const malas = [];
+  const ausentes = [];
+  for (let posicion = 1; posicion <= oficial.length; posicion++) {
+    const q = banco.find((x) => x.source && x.source.originalNumber === posicion);
+    if (!q) { ausentes.push(posicion); continue; }
+    if (q.correctOption !== oficial[posicion - 1]) {
+      malas.push(`${q.id}: banco ${q.correctOption} / oficial ${oficial[posicion - 1]}`);
+    }
+  }
+  console.log(`   ${modulo}: ${banco.length} preguntas, ${malas.length} discrepancias` +
+    (ausentes.length ? `, posiciones ausentes: ${ausentes.join(",")}` : ""));
+  if (modulo === "LC") console.log("      (la 15 está excluida del banco a propósito: ver docs/PLAN.md)");
+  malas.forEach((m) => { console.log(`      ✗ ${m}`); problemas.push(`clave oficial: ${m}`); });
+}
+
+// --------------------------------------------------------------------------------------
+// 2. Coherencia interna.
+// --------------------------------------------------------------------------------------
+console.log("\n2) Coherencia interna de los bancos");
+const todas = [];
+for (const [banco, preguntas] of Object.entries(D.questions)) {
+  for (const q of preguntas) todas.push({ banco, q });
+}
+
+const modulos = new Map((D.modules || []).map((m) => [m.id, m]));
+const vistas = new Map();
+
+for (const { banco, q } of todas) {
+  if (!q.id) { problemas.push(`${banco}: pregunta sin id`); continue; }
+  if (vistas.has(q.id)) problemas.push(`id duplicado: ${q.id}`);
+  vistas.set(q.id, q);
+  if (!q.id.startsWith(banco + "-")) problemas.push(`${q.id}: el prefijo no coincide con el banco ${banco}`);
+
+  if (q.kind === "essay") {
+    if (!q.prompt || !q.prompt.trim()) problemas.push(`${q.id}: ensayo sin enunciado`);
+  } else {
+    const keys = (q.options || []).map((o) => o.key);
+    if (new Set(keys).size !== keys.length) problemas.push(`${q.id}: keys de opción repetidas`);
+    // El examen ofrece 8 opciones en el emparejamiento de Inglés (Parte 2), 3 en las
+    // Partes 3-5 de Inglés y 4 en el resto de módulos de opción múltiple.
+    const minimo = q.module === "IN" ? (keys.length === 8 ? 8 : 3) : 4;
+    if (keys.length < minimo) problemas.push(`${q.id}: le faltan opciones (tiene ${keys.join(",")})`);
+    if (q.module !== "IN" && keys.length > 4) problemas.push(`${q.id}: más de 4 opciones`);
+    if (!keys.includes(q.correctOption)) problemas.push(`${q.id}: correctOption "${q.correctOption}" no está entre las opciones`);
+    if (!q.prompt || !q.prompt.trim()) problemas.push(`${q.id}: enunciado vacío`);
+    for (const o of q.options || []) {
+      if (!o.text || !String(o.text).trim()) problemas.push(`${q.id}: opción ${o.key} vacía`);
+    }
+  }
+
+  const meta = modulos.get(q.module);
+  if (!meta) problemas.push(`${q.id}: el módulo "${q.module}" no está en modules.js`);
+  else if (q.competencia && !(meta.competencias || []).some((c) => c.name === q.competencia)
+    && !(meta.parts || []).some((c) => c.name === q.competencia)) {
+    // Para Inglés la competencia es la parte del examen y modules.js la modela en `parts`.
+    problemas.push(`${q.id}: competencia "${q.competencia}" no figura en modules.js para ${q.module}`);
+  }
+}
+
+// Contextos: resolubilidad y coherencia con appliesTo.
+const idsContexto = new Set();
+const imagenes = [];
+for (const contextos of Object.values(D.contexts || {})) {
+  for (const c of contextos) {
+    idsContexto.add(c.id);
+    if (c.image) imagenes.push(c.image.src);
+    for (const id of c.appliesTo || []) if (!vistas.has(id)) problemas.push(`${c.id}: appliesTo apunta a ${id}, que no existe`);
+  }
+}
+for (const { q } of todas) {
+  const duenas = [];
+  for (const contextos of Object.values(D.contexts || {})) {
+    for (const c of contextos) if ((c.appliesTo || []).includes(q.id)) duenas.push(c.id);
+  }
+  if (q.contextId && !idsContexto.has(q.contextId)) problemas.push(`${q.id}: contextId ${q.contextId} no existe`);
+  if (q.contextId && duenas.length && !duenas.includes(q.contextId)) {
+    problemas.push(`${q.id}: apunta a ${q.contextId} pero figura en appliesTo de ${duenas.join(", ")}`);
+  }
+  if (!q.contextId && duenas.length) problemas.push(`${q.id}: sin contextId pero figura en ${duenas.join(", ")}`);
+}
+
+// Imágenes referenciadas vs. imágenes en disco.
+for (const src of imagenes) {
+  const p = path.join(APP, src);
+  if (!fs.existsSync(p)) problemas.push(`imagen inexistente: ${src}`);
+  else if (fs.statSync(p).size < 1000) problemas.push(`imagen sospechosamente pequeña: ${src}`);
+}
+const enDisco = fs.existsSync(path.join(APP, "assets/images"))
+  ? fs.readdirSync(path.join(APP, "assets/images")).filter((f) => f.endsWith(".png"))
+  : [];
+const sinReferenciar = enDisco.filter((f) => !imagenes.some((s) => s.endsWith(f)));
+sinReferenciar.forEach((f) => avisos.push(`imagen en disco que ningún contexto referencia: ${f}`));
+
+// Explicaciones: cobertura de las preguntas de opción múltiple, sin huérfanas.
+const explicaciones = D.explanations || {};
+const conExplicacion = (q) => q.explanation || explicaciones[q.id];
+for (const { q } of todas) {
+  if (q.kind === "essay") continue; // los ensayos se califican con rúbrica, no con explicación
+  if (!conExplicacion(q)) problemas.push(`${q.id}: sin explicación`);
+  else if (String(conExplicacion(q)).length < 120) avisos.push(`${q.id}: explicación muy corta`);
+}
+for (const id of Object.keys(explicaciones)) {
+  if (!vistas.has(id)) problemas.push(`explicación sin pregunta que la use: ${id}`);
+}
+
+// --------------------------------------------------------------------------------------
+// Resumen.
+// --------------------------------------------------------------------------------------
+const oficiales = todas.filter(({ q }) => !q.generated).length;
+const generadas = todas.length - oficiales;
+console.log(`   ${oficiales} preguntas oficiales + ${generadas} del banco propio = ${todas.length}`);
+console.log(`   ${imagenes.length} imágenes referenciadas, ${enDisco.length} en disco`);
+if (avisos.length) {
+  console.log("\nAvisos (no bloquean):");
+  avisos.forEach((a) => console.log("   · " + a));
+}
+console.log("\n" + (problemas.length ? `FALLOS (${problemas.length}):` : "Sin fallos."));
+problemas.forEach((p) => console.log("   ✗ " + p));
+process.exit(problemas.length ? 1 : 0);

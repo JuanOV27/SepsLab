@@ -40,16 +40,19 @@ window.SESP.data.contexts.RC = [
     module: "RC",
     type: "text+table",
     title: "Clases de pilates",
-    body: "Un instructor de pilates tiene un estudio con los equipos necesarios para que una persona reciba entrenamiento personalizado. La tabla 1 muestra la cantidad de sesiones por semana, el total en el mes y el costo mensual que una persona tendría que pagar por el entrenamiento (con 4 sesiones semanales / 16 clases al mes el costo mensual no se especifica en el cuadernillo original). La tabla 2 muestra los horarios ya ocupados por otras personas cada semana, de lunes a sábado, entre las 8 a.m. y las 7 p.m. (con un espacio libre entre 1 p.m. y 4 p.m.).",
+    // Tabla 1 y horario verificados contra la página 7 del cuadernillo. Una transcripción
+    // anterior corría los costos una fila (1→280.000, 2→384.000…), lo que volvía irresoluble
+    // la pregunta 8, y omitía por completo el horario que necesita la pregunta 9.
+    body: "Un instructor de pilates tiene un estudio con los equipos necesarios para que una persona reciba entrenamiento personalizado. La tabla 1 muestra la cantidad de sesiones por semana, el total en el mes y el costo mensual que una persona tendría que pagar por el entrenamiento. La tabla 2 muestra, en gris, los momentos del día que ya tiene clase con alguna persona, cada semana.",
     table: {
       headers: ["No. de sesiones por semana", "No. de clases al mes", "Costo mensual ($)"],
       rows: [
-        ["1", "4", "280.000"],
-        ["2", "8", "384.000"],
-        ["3", "12", "480.000"],
-        ["4", "16", "(no especificado)"]
+        ["2", "8", "280.000"],
+        ["3", "12", "384.000"],
+        ["4", "16", "480.000"]
       ]
     },
+    image: { src: "assets/images/RC-2018-CTX-03.png", alt: "Tabla 2: horario semanal de lunes (L) a sábado (S) con nueve franjas de una hora (8 a.m. a 2 p.m. y 4 p.m. a 7 p.m.); las celdas en gris indican las horas que el instructor ya tiene ocupadas con otras personas" },
     appliesTo: ["RC-2018-Q08", "RC-2018-Q09"]
   },
   {
@@ -59,11 +62,14 @@ window.SESP.data.contexts.RC = [
     title: "Inversión en seguridad vial",
     body: "La gráfica muestra la inversión que hizo un país, en temas de seguridad vial, durante 7 años (en millones de euros). Tomado de http://elmundo.es/elmundo/2003/graficos/jun/s1/datos_renfe.html, junio de 2003.",
     image: { src: "assets/images/RC-2018-CTX-04.png", alt: "Gráfica de línea 'Inversión en seguridad' con la inversión en millones de euros por año, de 1996 a 2002: 135,10; 109,68; 110,95; 108,96; 166,36; 195,77; 194,39" },
+    // Valores verificados contra la gráfica del cuadernillo (ver assets/images/RC-2018-CTX-04.png):
+    // la inversión baja de 1996 a 1999 y se dispara en 2000-2002. Una transcripción anterior
+    // tenía los años desordenados, lo que invalidaba la pregunta 10.
     table: {
       headers: ["Año", "Inversión (millones de euros)"],
       rows: [
-        ["1996", "109,68"], ["1997", "135,10"], ["1998", "166,36"], ["1999", "195,77"],
-        ["2000", "110,95"], ["2001", "108,96"], ["2002", "194,39"]
+        ["1996", "135,10"], ["1997", "109,68"], ["1998", "110,95"], ["1999", "108,96"],
+        ["2000", "166,36"], ["2001", "195,77"], ["2002", "194,39"]
       ]
     },
     appliesTo: ["RC-2018-Q10", "RC-2018-Q11"]
@@ -82,16 +88,19 @@ window.SESP.data.contexts.RC = [
     type: "text+table",
     title: "Comportamiento de cinco aves",
     body: "Un científico estudia el comportamiento de cinco aves a lo largo de cuatro sesiones de 30 minutos cada una. Durante las sesiones, el científico mide el tiempo (en minutos) que le toma a cada ave realizar cada una de siete actividades.",
+    // Tabla verificada contra la página 10 del cuadernillo. Una transcripción anterior tenía
+    // las filas desplazadas y las columnas de las aves 2 a 4 revueltas, lo que hacía que la
+    // pregunta 16 no tuviera respuesta coherente con la clave oficial.
     table: {
       headers: ["Actividad", "Ave 1", "Ave 2", "Ave 3", "Ave 4", "Ave 5"],
       rows: [
         ["1 Alimentación", "30", "21", "27", "15", "45"],
-        ["2 Acicalamiento", "16", "15", "10", "2", "12"],
-        ["3 Descanso", "20", "35", "5", "25", "15"],
-        ["4 Desplazamiento", "25", "7", "9", "5", "20"],
-        ["5 Orientación", "30", "10", "25", "19", "20"],
-        ["6 Defecación", "4", "2", "5", "4", "3"],
-        ["7 Comunicación", "10", "15", "30", "25", "15"]
+        ["2 Acicalamiento", "16", "35", "5", "25", "12"],
+        ["3 Descanso", "20", "10", "25", "20", "15"],
+        ["4 Desplazamiento", "25", "15", "30", "25", "20"],
+        ["5 Orientación", "4", "2", "5", "4", "3"],
+        ["6 Defecación", "10", "7", "9", "5", "15"],
+        ["7 Comunicación", "15", "30", "19", "26", "10"]
       ]
     },
     appliesTo: ["RC-2018-Q14", "RC-2018-Q15", "RC-2018-Q16"]
@@ -180,10 +189,10 @@ window.SESP.data.questions.RC = [
     prompt: "Patricia está muy contenta, pues afirma que, de la forma en que su tía repartió el dinero de sus bienes, ella obtendrá más dinero que si la herencia se dividiera en partes iguales entre los familiares vivos de la tía según el esquema. La afirmación de Patricia es",
     options: [{ key: "A", text: "incorrecta, pues de cualquiera de las dos formas los herederos reciben $32.000.000." }, { key: "B", text: "correcta, pues según el testamento la herencia se distribuye entre 6 personas; de la otra forma se debe repartir entre 8." }, { key: "C", text: "incorrecta, pues Patricia recibirá 10% de la herencia, que es menos que el 12,5% que recibiría con la otra distribución." }, { key: "D", text: "correcta, pues el dinero se divide solo entre ella y su hermano." }],
     correctOption: "C", tags: ["herencia", "porcentajes"] },
-  { id: "RC-2018-Q07", module: "RC", source: { cuadernillo: "Cuadernillo Saber Pro — Razonamiento Cuantitativo", year: 2018, publisher: "ICFES", url: "https://www.icfes.gov.co/wp-content/uploads/2024/12/02_02_Cuadernillo_de_preguntas_razonamiento_cuantitativo_saber_pro_2018.pdf", originalNumber: 7 }, contextId: "RC-2018-CTX-02", competencia: "Formulación y ejecución", contentArea: "Álgebra y cálculo", situationContext: "familiar-personal", kind: "single-select",
+  { id: "RC-2018-Q07", module: "RC", source: { cuadernillo: "Cuadernillo Saber Pro — Razonamiento Cuantitativo", year: 2018, publisher: "ICFES", url: "https://www.icfes.gov.co/wp-content/uploads/2024/12/02_02_Cuadernillo_de_preguntas_razonamiento_cuantitativo_saber_pro_2018.pdf", originalNumber: 7 }, contextId: "RC-2018-CTX-02", competencia: "Interpretación y representación", contentArea: "Álgebra y cálculo", situationContext: "familiar-personal", kind: "single-select",
     prompt: "¿Qué parte de la herencia le corresponde a Juan?",
     options: [{ key: "A", text: "La quinta parte." }, { key: "B", text: "La mitad." }, { key: "C", text: "La octava parte." }, { key: "D", text: "La tercera parte." }],
-    correctOption: "B", tags: ["herencia", "fracciones"] },
+    correctOption: "A", tags: ["herencia", "fracciones"] },
 
   { id: "RC-2018-Q08", module: "RC", source: { cuadernillo: "Cuadernillo Saber Pro — Razonamiento Cuantitativo", year: 2018, publisher: "ICFES", url: "https://www.icfes.gov.co/wp-content/uploads/2024/12/02_02_Cuadernillo_de_preguntas_razonamiento_cuantitativo_saber_pro_2018.pdf", originalNumber: 8 }, contextId: "RC-2018-CTX-03", competencia: "Argumentación", contentArea: "Álgebra y cálculo", situationContext: "familiar-personal", kind: "single-select",
     prompt: "Camilo quiere inscribirse a las clases de pilates ofrecidas por el instructor y escoger el total de sesiones mensual en la que el costo por sesión sea de menor precio. Camilo elige tomar 2 sesiones semanales. ¿Logra Camilo cumplir su propósito de que el costo por sesión sea el de menor precio?",
@@ -197,7 +206,7 @@ window.SESP.data.questions.RC = [
   { id: "RC-2018-Q10", module: "RC", source: { cuadernillo: "Cuadernillo Saber Pro — Razonamiento Cuantitativo", year: 2018, publisher: "ICFES", url: "https://www.icfes.gov.co/wp-content/uploads/2024/12/02_02_Cuadernillo_de_preguntas_razonamiento_cuantitativo_saber_pro_2018.pdf", originalNumber: 10 }, contextId: "RC-2018-CTX-04", competencia: "Interpretación y representación", contentArea: "Estadística", situationContext: "comunitario-social", kind: "single-select",
     prompt: "Durante el período 1996-2002, los años en los que se hizo mayor inversión en seguridad vial fueron",
     options: [{ key: "A", text: "1997, 1998, 1999 y 2000." }, { key: "B", text: "2000, 2001 y 2002." }, { key: "C", text: "1997, 1998 y 1999." }, { key: "D", text: "1996, 1997, 1998 y 1999." }],
-    correctOption: "C", tags: ["grafica"] },
+    correctOption: "B", tags: ["grafica"] },
   { id: "RC-2018-Q11", module: "RC", source: { cuadernillo: "Cuadernillo Saber Pro — Razonamiento Cuantitativo", year: 2018, publisher: "ICFES", url: "https://www.icfes.gov.co/wp-content/uploads/2024/12/02_02_Cuadernillo_de_preguntas_razonamiento_cuantitativo_saber_pro_2018.pdf", originalNumber: 11 }, contextId: "RC-2018-CTX-04", competencia: "Formulación y ejecución", contentArea: "Álgebra y cálculo", situationContext: "comunitario-social", kind: "single-select",
     prompt: "La inversión en seguridad se realiza el 10 de enero de cada año. En enero 10 de 2002, un euro equivalía a 2.800 pesos colombianos, aproximadamente. Se proponen los siguientes procedimientos para hallar el valor de la inversión en seguridad en pesos colombianos: I. Convertir 194,39 millones de euros a pesos colombianos. II. Convertir 2.800 pesos colombianos a euros. III. Multiplicar 194,39 por 2.800 y luego dividir entre el total de años. ¿Cuál o cuáles de los procedimientos es correcto para hallar lo solicitado?",
     options: [{ key: "A", text: "I y III solamente." }, { key: "B", text: "I solamente." }, { key: "C", text: "II y III solamente." }, { key: "D", text: "II solamente." }],
@@ -210,7 +219,7 @@ window.SESP.data.questions.RC = [
   { id: "RC-2018-Q13", module: "RC", source: { cuadernillo: "Cuadernillo Saber Pro — Razonamiento Cuantitativo", year: 2018, publisher: "ICFES", url: "https://www.icfes.gov.co/wp-content/uploads/2024/12/02_02_Cuadernillo_de_preguntas_razonamiento_cuantitativo_saber_pro_2018.pdf", originalNumber: 13 }, contextId: "RC-2018-CTX-05", competencia: "Argumentación", contentArea: "Álgebra y cálculo", situationContext: "comunitario-social", kind: "single-select",
     prompt: "Una persona afirma: \"Como al día se ahorran 140 litros de petróleo por cada tonelada de papel y cartón reciclado en la ciudad, durante un mes se ahorrarán exactamente 30 veces 140 litros de petróleo\". Su afirmación es",
     options: [{ key: "A", text: "correcta, porque el número 30 indica el número de días que tiene un mes." }, { key: "B", text: "incorrecta, porque debe tener en cuenta las 150 toneladas de papel y cartón reciclado por día." }, { key: "C", text: "correcta, porque tiene en cuenta que día tras día hay 140 litros más de petróleo ahorrado." }, { key: "D", text: "incorrecta, porque debe tener en cuenta las 25 toneladas de papel y cartón reciclado por día (600 × 25%)." }],
-    correctOption: "D", tags: ["porcentajes"] },
+    correctOption: "B", tags: ["porcentajes"] },
 
   { id: "RC-2018-Q14", module: "RC", source: { cuadernillo: "Cuadernillo Saber Pro — Razonamiento Cuantitativo", year: 2018, publisher: "ICFES", url: "https://www.icfes.gov.co/wp-content/uploads/2024/12/02_02_Cuadernillo_de_preguntas_razonamiento_cuantitativo_saber_pro_2018.pdf", originalNumber: 14 }, contextId: "RC-2018-CTX-06", competencia: "Argumentación", contentArea: "Álgebra y cálculo", situationContext: "divulgacion-cientifica", kind: "single-select",
     prompt: "Los resultados indican que el ave 5 tarda más alimentándose que desplazándose. Esto es correcto, puesto que el tiempo en alimentación excede al de desplazamiento en",

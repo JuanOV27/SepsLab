@@ -79,7 +79,11 @@ SESP/
   docs/
     PLAN.md                   este documento
     FUENTES.md                cita completa de cada cuadernillo/guía usado (pendiente)
-  data-source/                carpetas de staging por módulo, ya no se usan (las preguntas viven directo en app/data)
+  data-source/                PDFs originales de los cuadernillos, solo local (ignorados por git):
+                             sirven para volver a transcribir o recortar imágenes; no se redistribuyen
+  tools/
+    auditar.js                verificación de claves contra las tablas oficiales del ICFES +
+                             coherencia interna de los bancos (node tools/auditar.js)
 ```
 
 ## Sistema de medición de velocidad (el foco principal del pedido)
@@ -186,3 +190,75 @@ Los 5 módulos, el motor, los 4 modos y la interfaz están completos y probados.
 - [x] **Imágenes reales del cuadernillo** en las preguntas que las necesitan (antes solo tenían una descripción en texto): 4 en RC (`RC-2018-CTX-02` árbol genealógico, `CTX-04` gráfico de inversión vial, `CTX-07` diagrama de pistas de aterrizaje, `CTX-10` fuente de chocolate) y 3 en LC (`LC-2018-CTX-06` publicidad Tetra Pak, `CTX-07` cómic de Mafalda, `CTX-12` propaganda vintage). Extraídas de los PDFs oficiales con `pdftoppm`/`convert` (recorte manual verificado visualmente por el agente antes de guardar), guardadas en `app/assets/images/` y referenciadas desde cada contexto con `image: { src, alt }`. `ui/app.js` (`renderContext`) y `ui/styles.css` (`.context-image`) ya soportan este campo para cualquier contexto futuro. Ninguna requirió que el usuario tomara capturas manuales; para LC se respetó la restricción de no tocar nunca la página 13 del PDF (ver sección de arriba).
 
 Estructura de archivos actualizada: se agregó `app/assets/images/` (imágenes reales recortadas de los cuadernillos) y `data-source/rc-2018/` (PDF fuente de RC, descargado para la extracción de imágenes, igual que ya existía `data-source/lc-2018/`).
+
+## Ronda 3: módulos de competencia específica (Ingeniería de Sistemas)
+
+El usuario necesita saber cuál módulo específico le aplicará en su Saber Pro real. Según el documento oficial "Oferta de combinatorias Saber Pro 2026-2" (ver `docs/FUENTES.md`), el NBC "Ingeniería de sistemas, telemática y afines" solo ofrece tres módulos específicos posibles (combinatoria 49 = los tres; combinatoria 36 = solo los dos primeros; combinatoria 0 = ninguno). En vez de esperar la confirmación, se construyeron los tres bancos completos:
+
+- [x] **`questions.fp.js` — Formulación de Proyectos de Ingeniería** (22 preguntas reales del cuadernillo 2018, 6 con contexto/tabla propia). Competencias y pesos oficiales (40/40/20) verificados contra dos fuentes independientes (marco de referencia + guía de orientación) y contra la tabla de respuestas del propio cuadernillo.
+- [x] **`questions.ds.js` — Diseño de Software** (25 preguntas reales del cuadernillo 2018, 8 contextos — 1 caso compartido TPMENS/TENSOFT para Q1-8, 1 caso compartido WebGallery para Q23-25, y 6 diagramas UML/mockups de una sola pregunta cada uno: estructura de módulos, mockups de interfaz, diagrama de clases+secuencia, patrón Observador, diagramas de dominio, diagramas de casos de uso). Las 6 imágenes de diagramas se recortaron de `data-source/ds-2018/` con el mismo método que RC/LC. No hay pesos oficiales publicados por competencia para este módulo (ver `docs/FUENTES.md`); se usó un reparto igualitario propio, documentado como tal en el código.
+- [x] **`questions.pc.js` — Pensamiento Científico, núcleo común** (24 preguntas). Nota importante de alcance: el único cuadernillo de práctica que ICFES publica para este módulo cubre el **núcleo común** (24 de las 25 preguntas comunes a las 5 áreas posibles), no el núcleo específico de Matemáticas y Estadística — ICFES no publica cuadernillo de práctica para ningún núcleo específico. Se intentó primero con el cuadernillo 2018 (mismo hallazgo) y luego con el 2026 que dio el usuario (contenido distinto, mismo problema de alcance); de las 24 preguntas del cuadernillo 2026, 7 necesitaron la gráfica/diagrama original (no se pueden resolver de forma justa solo con texto sin arriesgarse a revelar o malinterpretar la respuesta) y se recortaron como imágenes reales, igual que en RC/LC/DS.
+
+**Nota técnica**: el PDF del cuadernillo de Pensamiento Científico 2026 no es extraíble con `pdftotext` (el texto está incrustado sin mapa a Unicode); las 24 preguntas se transcribieron leyendo visualmente cada página renderizada con `pdftoppm`, no copiando texto. Las respuestas y competencias de los tres módulos se verificaron contra la tabla de respuestas oficial de cada cuadernillo.
+
+Integración completa: los 3 módulos están dados de alta en `app/data/modules.js` (colores `#0d9488`/`#db2777`/`#65a30d`, sin colisión con los 5 genéricos) y cargados en `app/index.html`. Probado en navegador real: los 8 módulos aparecen en el selector de Practice, las preguntas con imagen (verificado con PC) renderizan la imagen real sin romperse, y una verificación automatizada confirmó que las 13 imágenes del proyecto (7 de RC/LC + 6 de DS + 7 de PC — el total incluye las de rondas anteriores) responden 200 sin ninguna rota.
+
+Pendiente del usuario: confirmar en su citación de ICFES (o con el director de programa) cuál de los tres módulos específicos le aplica realmente, para priorizar la práctica.
+
+## Ronda 4: Modo Entrenamiento (banco propio, no oficial)
+
+El problema que motivó esta ronda lo describió el usuario así: *"las preguntas que se repiten las respondo más rápido, porque ya sé la respuesta"*. Con el examen el 2026-10-18 y los bancos oficiales de RC/LC/CC/IN ya recorridos varias veces, repetirlos mide memoria, no competencia. Los módulos específicos (FP/DS/PC, 71 preguntas) sí estaban sin usar, pero son 1 de 5 módulos del examen; los genéricos son 4 de 5.
+
+- [x] **`app/data/questions.gen.{rc,lc,cc,in,ce}.js` — banco propio de 130 ítems** (30 preguntas de opción múltiple de RC, 30 de LC, 30 de CC y 35 de IN, más 5 temas de ensayo argumentativo para CE), redactados imitando formato, nivel, competencias y tipos de contexto de los cuadernillos oficiales. Contextos nuevos: tablas de datos, pasajes de lectura, cloze de inglés, texto discontinuo publicitario y un ejercicio de emparejamiento de vocabulario A-H con wordBank. Los pasajes de LC son textos originales, no fragmentos de obras de terceros.
+- [x] **Cada pregunta trae `explanation`** con el razonamiento resuelto, incluido por qué falla cada distractor. Esto es lo que los cuadernillos del ICFES no publican, y es la diferencia entre fallar y aprender algo al fallar.
+- [x] **`app/modes/training.js` — Modo Entrenamiento**, con filtro por módulo y por competencia. Solo este modo toca el banco generado.
+- [x] **Separación estricta del material oficial**: el banco vive en `window.SESP.data.questions.GEN`, cada pregunta lleva `generated: true`, y en pantalla aparece el distintivo "No oficial". Verificado en navegador: Práctica, Simulacro y Exprés devuelven **cero** preguntas generadas en sus colas.
+
+**Decisión de diseño — por qué la clave `GEN` y no un banco por módulo**: `engine.findQuestionById()` resuelve el banco a partir del prefijo del id (`"RC-2018-Q01".split("-")[0]`). Dándole a las preguntas generadas ids con prefijo `GEN-` (p. ej. `GEN-RC-Q04`) quedan en su propio banco sin tocar el motor, pero conservan `module: "RC"`, así que los cronómetros objetivo, las estadísticas por módulo y la cola de repaso siguen funcionando sin cambios. Verificado: una pregunta generada fallada entra a la cola de repaso bajo RC y el Modo Repaso la resuelve correctamente.
+
+**Balance de la clave de respuesta**: el primer borrador salió con 31 de 60 respuestas en "B" y una sola en "D" — un banco así entrena a adivinar la letra. Se rebalanceó a 15/15/15/15 reordenando los textos de las opciones y reescribiendo las referencias por letra dentro de cada explicación. El primer intento de rebalanceo produjo un ciclo perfecto (`BCDABCDABCD…`), aún más adivinable que el sesgo original, así que el reparto final es aleatorio con semilla fija y rechaza explícitamente rachas de tres y pasos constantes. Quedaron fuera del reordenamiento las preguntas con opciones numéricas o de magnitud creciente (el orden ascendente es la convención del examen) y las que se refieren a los "planes A/B/C" de su propio contexto. (El banco creció después a 130 ítems; el reparto actual por módulo está entre 6 y 9 respuestas por letra, ver `docs/FUENTES.md`.)
+
+Pendiente, para rondas siguientes (las otras dos opciones que pidió el usuario y que esta ronda dejó para después):
+- Buscar bancos no oficiales de terceros y explicaciones de docentes en video. Se despriorizó: calidad no verificable y costo alto de extracción frente al tiempo que queda antes del examen.
+- Sección de estudio/afianzamiento previo en el menú principal (videos, enlaces, documentos y texto, clasificados por área). Es el contenedor natural de lo que salga del punto anterior.
+
+## Ronda 5: auditoría de datos y explicaciones
+
+El banco oficial ya estaba recorrido varias veces, pero nadie lo había **verificado** contra las tablas de respuestas de los cuadernillos, ni contra las tablas y gráficas que el motor usa para resolver las preguntas. Dos riesgos distintos: una clave mal transcrita (el estudiante falla siempre la misma pregunta y no sabe por qué) y un dato de contexto corrido (la pregunta se vuelve irresoluble y el estudiante que la "acierta" la adivinó).
+
+### Verificación de claves contra los PDF oficiales
+
+Se transcribió la sección "Información de cada pregunta" (RC, LC, CC, IN, FP, DS) y "Tabla de respuestas correctas" (PC 2026) de cada cuadernillo y se comparó posición por posición contra `correctOption` en los bancos. Resultado: **171 preguntas de opción múltiple, 0 discrepancias**. La única posición ausente es LC 15, la excluida por contenido sensible. También se contrastaron las competencias de RC y PC contra la misma tabla.
+
+### Errores de transcripción encontrados y corregidos (RC)
+
+Eran reales y afectaban la resolubilidad de las preguntas, no solo la clave:
+
+- **Tabla de clases de pilates**: los costos iban corridos una fila (1→280.000, 2→384.000… cuando el cuadernillo dice 2→280.000, 3→384.000, 4→480.000). Con la tabla corrida, la pregunta 8 daba dos respuestas posibles. Además faltaba por completo el horario que la pregunta 9 necesita: se extrajo como imagen real `RC-2018-CTX-03.png` desde la página 7 del PDF. Verificado por análisis píxel a píxel de la imagen contra el PDF: lunes 4 horas libres, martes a viernes 5, sábado 6; 17 libres en la mañana y 13 en la tarde, que es exactamente lo que afirma la explicación de la pregunta 9.
+- **Gráfica de inversión vial**: los años estaban desordenados, lo que invalidaba la pregunta 10. Orden correcto: 135,10 (1996), 109,68, 110,95, 108,96, 166,36 (2000), 195,77, 194,39.
+- **Tabla de las cinco aves**: filas desplazadas y columnas de las aves 2 a 4 revueltas. Verificada contra la página 10 del cuadernillo, celda por celda.
+- **Tres claves** que no correspondían a la tabla oficial.
+
+LC, FP y DS quedaron sin cambios: sus claves y competencias ya coincidían con el PDF.
+
+### Explicaciones de las 171 preguntas oficiales (`app/data/explanations.js`)
+
+El ICFES publica la clave pero no el razonamiento, así que reintentar una pregunta solo entrena memoria. Las explicaciones viven en un archivo aparte, no dentro de `questions.*.js`, para no mezclar transcripción oficial con análisis propio. Se muestran en dos lugares, y solo en dos: **Modo Entrenamiento** (siempre) y **Modo Repaso** (solo al fallar, porque llegar a Repaso ya significa haberla fallado antes). Simulacro y Exprés no las muestran, para no romper la simulación del examen.
+
+Cuando la clave oficial no coincide con la opción que el razonamiento obtiene (RC 18 y PC 17, PC 20), la explicación dice explícitamente qué dice la clave y cuál es el argumento técnico, en vez de inventar una justificación para que cuadren. Queda escrito en la explicación que el método general es el que se repite en el examen.
+
+### Auditoría del banco propio con subagentes
+
+Las 125 preguntas de opción múltiple del banco de entrenamiento se repartieron entre cuatro subagentes, uno por módulo, con la instrucción de resolver cada pregunta por cuenta propia y no fiar de la explicación. Salieron 3 problemas graves y 12 menores; todos corregidos:
+
+- **Doble respuesta válida** (grave, es el fallo que más confunde): GEN-RC-Q03, donde el distractor D también era cierto; GEN-CC-Q17, donde tutela y habeas corpus eran ambos defendibles (se reescribió para pedir el mecanismo *específico*); GEN-IN-Q06, un diálogo en el que un pasajero "abre la ventana" y la opción C era una negativa perfectamente válida (se reemplazó por un ejercicio donde los distractores responden a otra pregunta).
+- **Distractor duplicado**: en GEN-RC-Q22 las opciones C y D eran la misma expresión matemática.
+- **Enunciado mal planteado**: GEN-RC-Q08 ("¿a partir de qué consumo…?" con opciones "más de 40/45/55 GB", donde tres eran ciertas) se reformuló como "menor consumo a partir del cual".
+- **Atribución legal incorrecta**: GEN-CC-Q18 daba por bueno un cabildo abierto sobre "un proyecto" cuando el parágrafo del artículo 23 de la Ley 1757 de 2015 prohíbe expresamente presentar iniciativas de ordenanza, acuerdo o resolución local en ese mecanismo. Se ajustó el enunciado a una obra y se documentó el límite en la explicación. En GEN-CC-Q14 se corrigió la atribución de la gradualidad de la sanción a la Ley 1620 de 2013 (la ley crea la ruta de atención; la gradualidad la impone la jurisprudencia).
+- **Errores en las explicaciones** (no en las claves): referencias cruzadas a las letras de las opciones, un "Me neither" que no existe en inglés, un calco del español ("transport stations"), atribuciones equivocadas del error que produce cada distractor y un conteo ("repite tres veces" en vez de cuatro).
+- **Falta de cobertura**: el banco propio no tenía ningún ejercicio de emparejamiento A-H, que es el formato real de la Parte 2 de Inglés (11 % del módulo). Se añadió `GEN-IN-CTX-05` con wordBank de ocho palabras y cinco ítems, con la misma convención del cuadernillo oficial: una palabra usada como ejemplo y dos sin usar.
+
+### Verificación automatizada repetible
+
+Quedó en `tools/auditar.js` (Node, sin dependencias, se corre con `node tools/auditar.js`) un chequeo en dos bloques repetible en cualquier momento. El primero transcribe las tablas de respuestas oficiales de los siete cuadernillos y las compara posición por posición con `correctOption`; el segundo revisa la coherencia interna de todos los bancos: ids únicos y con prefijo coherente con su banco, `correctOption` dentro de las opciones, número de opciones que el examen real usa en cada módulo, competencia registrada en `modules.js`, `contextId` resoluble y coherente con `appliesTo`, imágenes referenciadas que existen en disco y explicaciones presentes, sin huérfanas ni sospechosamente cortas. Sale con código 1 si algo falla.
+Resultado actual: **0 discrepancias de clave en 171 preguntas y 0 fallos estructurales en los 303 ítems del proyecto** (173 oficiales + 130 del banco propio). Se comprobó que el script detecta de verdad los errores que dice detectar, mutando a propósito una clave, una competencia y una explicación.

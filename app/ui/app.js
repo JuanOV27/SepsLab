@@ -186,7 +186,7 @@ window.SESP.ui = (function () {
     const sessionsCount = storage.getSessions().length;
     return `
       <h1>SESP — Práctica Saber Pro</h1>
-      <p class="muted">Preguntas reales de cuadernillos oficiales ICFES 2018. Elige un modo para empezar.</p>
+      <p class="muted">Preguntas reales de cuadernillos oficiales del ICFES. Elige un modo para empezar.</p>
       <div class="mode-grid">
         <button class="mode-card" data-action="go-config" data-mode="practice">
           <h3>Práctica libre</h3>
@@ -204,6 +204,10 @@ window.SESP.ui = (function () {
           <h3>Modo Exprés</h3>
           <p class="muted">Sesión de duración fija: 15, 30 o 60 minutos.</p>
         </button>
+        <button class="mode-card" data-action="go-config" data-mode="training">
+          <h3>Entrenamiento</h3>
+          <p class="muted">${modesApi.training.countFor("Todas")} preguntas nuevas con explicación resuelta. No son del ICFES.</p>
+        </button>
       </div>
       <button class="btn btn-secondary btn-block" data-action="go-progress" style="margin-top:16px;">Ver progreso</button>
       <p class="muted" style="margin-top:12px;">
@@ -219,18 +223,20 @@ window.SESP.ui = (function () {
     if (modeId === "practice") config = { moduleId: "RC", competencia: "" };
     else if (modeId === "simulation") config = { moduleId: "RC" };
     else if (modeId === "review") config = { moduleFilter: "" };
-    else if (modeId === "express") config = { durationMinutes: 15, areaFilter: "Todas" };
+    else if (modeId === "express") config = { durationMinutes: 15, modules: ["RC", "LC", "CC", "IN"], sources: ["oficial"] };
+    else if (modeId === "training") config = { moduleId: "Todas", competencia: "" };
     state = { screen: "modeConfig", modeId, config };
     render();
   }
 
   function renderModeConfig() {
-    const titleMap = { practice: "Práctica libre", simulation: "Simulacro", review: "Repaso", express: "Modo Exprés" };
+    const titleMap = { practice: "Práctica libre", simulation: "Simulacro", review: "Repaso", express: "Modo Exprés", training: "Entrenamiento" };
     let body = "";
     if (state.modeId === "practice") body = renderPracticeConfig();
     else if (state.modeId === "simulation") body = renderSimulationConfig();
     else if (state.modeId === "review") body = renderReviewConfig();
     else if (state.modeId === "express") body = renderExpressConfig();
+    else if (state.modeId === "training") body = renderTrainingConfig();
     return `
       <button class="link-btn" data-action="go-home">&larr; Volver</button>
       <h2>${titleMap[state.modeId]}</h2>
@@ -294,18 +300,76 @@ window.SESP.ui = (function () {
 
   function renderExpressConfig() {
     const durationHtml = [15, 30, 60].map((d) => `
-      <label style="margin-right:16px;">
+      <label class="check-item">
         <input type="radio" name="durationMinutes" data-field="durationMinutes" value="${d}" ${Number(state.config.durationMinutes) === d ? "checked" : ""}> ${d} min
       </label>
     `).join("");
-    const areaOptions = [`<option value="Todas" ${state.config.areaFilter === "Todas" ? "selected" : ""}>Todas (mezcla RC, LC, CC, IN)</option>`]
-      .concat(modules.map((m) => `<option value="${m.id}" ${m.id === state.config.areaFilter ? "selected" : ""}>${m.name}</option>`))
-      .join("");
+
+    const selected = state.config.modules;
+    const areaHtml = modules.map((m) => `
+      <label class="check-item">
+        <input type="checkbox" data-field="modules" data-value="${m.id}" ${selected.indexOf(m.id) !== -1 ? "checked" : ""}>
+        ${escapeHtml(m.name)}${m.kind === "essay" ? " (ensayo)" : ""}
+      </label>
+    `).join("");
+
+    const sources = state.config.sources;
+    const sourceHtml = [
+      { id: "oficial", label: "Cuadernillos oficiales del ICFES" },
+      { id: "generado", label: "Banco de entrenamiento (no oficial)" },
+    ].map((s) => `
+      <label class="check-item">
+        <input type="checkbox" data-field="sources" data-value="${s.id}" ${sources.indexOf(s.id) !== -1 ? "checked" : ""}>
+        ${s.label}
+      </label>
+    `).join("");
+
+    const isEssay = selected.length === 1 && selected[0] === "CE";
+    const available = isEssay ? null : modesApi.express.countFor(selected, sources);
+    let hint;
+    if (!selected.length) hint = "Marca al menos un área.";
+    else if (!sources.length) hint = "Marca al menos una fuente.";
+    else if (isEssay) hint = "Sesión de ensayo: Comunicación Escrita no se mezcla con otras áreas.";
+    else hint = `${available} pregunta${available === 1 ? "" : "s"} disponible${available === 1 ? "" : "s"} con esta selección. Si se agotan antes de que acabe el tiempo, se rebarajan.`;
+
     return `
       <div class="card">
-        <div class="field"><label>Duración</label><div class="row">${durationHtml}</div></div>
-        <div class="field"><label>Área</label><select data-field="areaFilter">${areaOptions}</select></div>
-        <button class="btn btn-block" data-action="start-session">Comenzar</button>
+        <div class="field"><label>Duración</label><div class="check-grid">${durationHtml}</div></div>
+        <div class="field"><label>Áreas</label><div class="check-grid">${areaHtml}</div></div>
+        <div class="field"><label>Fuente de las preguntas</label><div class="check-grid">${sourceHtml}</div></div>
+        <p class="muted">${escapeHtml(hint)}</p>
+        <button class="btn btn-block" data-action="start-session" ${!selected.length || !sources.length || available === 0 ? "disabled" : ""}>Comenzar</button>
+      </div>
+    `;
+  }
+
+  // El selector de módulo aquí no es el global: solo lista los módulos que tienen
+  // preguntas en el banco de entrenamiento, con su conteo, para no ofrecer filtros vacíos.
+  function renderTrainingConfig() {
+    const trainingModules = modesApi.training.listModules();
+    const moduleOptions = [`<option value="Todas" ${state.config.moduleId === "Todas" ? "selected" : ""}>Todos (${modesApi.training.countFor("Todas")})</option>`]
+      .concat(trainingModules.map((m) => `<option value="${m.id}" ${m.id === state.config.moduleId ? "selected" : ""}>${m.name} (${modesApi.training.countFor(m.id)})</option>`))
+      .join("");
+
+    const selectedMeta = moduleMeta(state.config.moduleId);
+    let competenciaField = "";
+    if (selectedMeta && selectedMeta.kind === "essay") {
+      competenciaField = `<p class="muted">Ensayo argumentativo con el esquema real: 10 min de planeación + 30 min de escritura. Al terminar verás una lista de autoevaluación en vez de una calificación.</p>`;
+    } else if (state.config.moduleId !== "Todas") {
+      const comps = modesApi.training.listCompetencias(state.config.moduleId);
+      const opts = [`<option value="">Todas las competencias</option>`]
+        .concat(comps.map((c) => `<option value="${c}" ${c === state.config.competencia ? "selected" : ""}>${c}</option>`))
+        .join("");
+      competenciaField = `<div class="field"><label>Competencia (opcional)</label><select data-field="competencia">${opts}</select></div>`;
+    }
+
+    return `
+      <div class="card">
+        <p class="muted">Banco <strong>no oficial</strong>: preguntas escritas para este proyecto imitando el formato del ICFES. Sirven para practicar cuando ya te sabes de memoria las de los cuadernillos — pero la fuente de verdad siguen siendo los modos con material oficial.</p>
+        <p class="muted">Cada pregunta muestra la explicación resuelta después de que respondas.</p>
+        <div class="field"><label>Módulo</label><select data-field="moduleId">${moduleOptions}</select></div>
+        ${competenciaField}
+        <button class="btn btn-block" data-action="start-session">Comenzar entrenamiento</button>
       </div>
     `;
   }
@@ -323,7 +387,9 @@ window.SESP.ui = (function () {
         session = modesApi.review.start({ moduleFilter: state.config.moduleFilter || null });
         if (!session) { showMessage("No hay preguntas pendientes de repaso con ese filtro."); return; }
       } else if (state.modeId === "express") {
-        session = modesApi.express.start({ durationMinutes: Number(state.config.durationMinutes), areaFilter: state.config.areaFilter });
+        session = modesApi.express.start({ durationMinutes: Number(state.config.durationMinutes), modules: state.config.modules, sources: state.config.sources });
+      } else if (state.modeId === "training") {
+        session = modesApi.training.start({ moduleId: state.config.moduleId, competencia: state.config.competencia || undefined });
       }
       state.session = session;
       state.answered = false;
@@ -359,11 +425,28 @@ window.SESP.ui = (function () {
     return `<div class="context-box">${titleHtml}${escapeHtml(context.body)}${imageHtml}${tableHtml}</div>`;
   }
 
+  // Los contextos oficiales viven en contexts[<módulo>]; los del banco de
+  // entrenamiento, en contexts.GEN (aunque su pregunta declare module: "RC").
+  function findContext(q) {
+    if (!q.contextId) return null;
+    const pools = window.SESP.data.contexts || {};
+    return (pools[q.module] || []).find((c) => c.id === q.contextId)
+      || (pools.GEN || []).find((c) => c.id === q.contextId)
+      || null;
+  }
+
+  // El banco de entrenamiento trae la explicación dentro de la propia pregunta. Las
+  // oficiales la tienen aparte, en data/explanations.js: los archivos de cuadernillo
+  // son transcripción literal del ICFES y no deben mezclarse con análisis propio.
+  function explanationFor(q) {
+    return q.explanation || (window.SESP.data.explanations || {})[q.id] || null;
+  }
+
   function renderQuestion() {
     const session = state.session;
     const q = engine.getCurrentQuestion(session);
     const meta = moduleMeta(q.module);
-    const context = q.contextId ? (window.SESP.data.contexts[q.module] || []).find((c) => c.id === q.contextId) : null;
+    const context = findContext(q);
 
     const optionsHtml = q.options.map((opt) => {
       let cls = "option";
@@ -382,6 +465,16 @@ window.SESP.ui = (function () {
       feedbackHtml = state.lastAnswer.correct
         ? `<p class="feedback correct">Correcto — ${fmtMs(state.lastAnswer.timeMs)}</p>`
         : `<p class="feedback incorrect">Incorrecto — la respuesta correcta era ${q.correctOption} — ${fmtMs(state.lastAnswer.timeMs)}</p>`;
+      // Entrenamiento explica siempre. Repaso explica solo al fallar: llegar aquí ya
+      // significa haberla fallado antes, así que un segundo error es justo donde deja
+      // de servir repetir y hace falta el razonamiento. Los modos cronometrados
+      // (Simulacro, Exprés) no explican, para no romper la simulación del examen.
+      const explanation = explanationFor(q);
+      const shouldExplain = state.modeId === "training" || (state.modeId === "review" && !state.lastAnswer.correct);
+      if (explanation && shouldExplain) {
+        const heading = state.modeId === "review" ? "Por qué — la volviste a fallar" : "Por qué";
+        feedbackHtml += `<div class="explanation"><h4>${heading}</h4><p>${escapeHtml(explanation)}</p></div>`;
+      }
       nextButtonHtml = canContinue()
         ? `<button class="btn" data-action="next-question">Siguiente</button>`
         : `<button class="btn" data-action="finish-session">Ver resultados</button>`;
@@ -395,6 +488,7 @@ window.SESP.ui = (function () {
       <div class="top-actions"><button class="link-btn" data-action="finish-session">Terminar sesión</button></div>
       <div class="timer-bar">
         <span class="pill" style="background:${meta.color}">${meta.name}</span>
+        ${q.generated ? `<span class="pill pill-warn" title="Pregunta escrita para este proyecto, no tomada de un cuadernillo del ICFES">No oficial</span>` : ""}
         <span class="timer-chip fast" id="question-timer">${fmtMs(engine.getElapsedForCurrentQuestionMs(session))}</span>
         ${totalTimerHtml}
       </div>
@@ -745,10 +839,33 @@ window.SESP.ui = (function () {
       if (t.files && t.files[0]) importProgressFile(t.files[0]);
       return;
     }
-    if (t.matches("[data-field]")) {
-      state.config[t.dataset.field] = t.value;
+    if (!t.matches("[data-field]")) return;
+
+    if (t.type === "checkbox") {
+      toggleInConfigList(t.dataset.field, t.dataset.value, t.checked);
       render();
+      return;
     }
+
+    state.config[t.dataset.field] = t.value;
+    // Cambiar de módulo invalida la competencia elegida (pertenece al módulo anterior):
+    // si no se limpia, el filtro combinado deja el banco vacío y la sesión no arranca.
+    if (t.dataset.field === "moduleId") state.config.competencia = "";
+    render();
+  }
+
+  // Los módulos de ensayo (CE) no se mezclan con los de opción múltiple: marcarlo
+  // deselecciona el resto, y marcar cualquier otro lo deselecciona a él.
+  function toggleInConfigList(field, value, checked) {
+    const current = state.config[field] || [];
+    let next = checked ? current.concat([value]) : current.filter((v) => v !== value);
+
+    if (field === "modules" && checked) {
+      const isEssay = (id) => { const m = moduleMeta(id); return m && m.kind === "essay"; };
+      next = isEssay(value) ? [value] : next.filter((id) => !isEssay(id));
+    }
+
+    state.config[field] = next;
   }
 
   function handleInput(e) {

@@ -281,7 +281,20 @@ Dos vías, ambas sobre los mismos archivos de `app/`:
 - **PWA**: `app/manifest.json` + iconos 192/512 y `<link rel="manifest">`. No hay service worker a propósito: durante las pruebas un caché agresivo sirvió código viejo tras cada cambio, y esta app no necesita funcionar sin conexión (los datos son locales, pero el código cambia seguido).
 - **APK de Android con Capacitor 8**: proyecto nativo en `android/`, `webDir: app` (no hay paso de build porque la app es HTML/CSS/JS puro).
 
-Flujo: `npm run sync` copia `app/` a `android/app/src/main/assets/public/` y actualiza los plugins; `npm run apk` hace el sync y luego `./gradlew assembleDebug`. El APK sale en `android/app/build/outputs/apk/debug/`. Ese directorio necesita el SDK de Android con `compileSdk 36`; con solo el JDK no se puede compilar, así que la verificación de esta ronda se hizo sobre el código web y sobre `npx cap sync`, que no necesita el SDK.
+Flujo: `npm run sync` copia `app/` a `android/app/src/main/assets/public/` y actualiza los plugins; `npm run apk` hace el sync y luego `./gradlew assembleDebug`. El APK sale en `android/app/build/outputs/apk/debug/` (6 MB) y se instala con `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`.
+
+**Hace falta un JDK 21** (el proyecto nativo lo fija: `sourceCompatibility JavaVersion.VERSION_21`). En esta máquina no había ninguno y no hay sudo sin contraseña, así que se instaló uno portable, sin tocar el sistema:
+
+```
+curl -sL -o jdk.tar.gz "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse"
+tar xzf jdk.tar.gz -C ~/tools          # queda en ~/tools/jdk-21.0.12.1+1
+export JAVA_HOME="$HOME/tools/jdk-21.0.12.1+1"
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
+npm run apk
+```
+
+El SDK de Android sí estaba en `~/Android/Sdk` (platform 36, build-tools 36). `npm run auditar`, `npm run servidor` y `npx cap sync` no necesitan nada de esto: solo el APK.
 
 ### Bugs reales encontrados y corregidos en el móvil
 
@@ -298,8 +311,14 @@ Flujo: `npm run sync` copia `app/` a `android/app/src/main/assets/public/` y act
 
 También: `viewport-fit=cover` (sin él, `env(safe-area-inset-*)` vale 0 y el contenido queda bajo la barra de gestos del notch), `text-size-adjust: 100%`, `touch-action: manipulation`, cronómetro pegado arriba al desplazar un pasaje largo, botones de acción principal a ancho completo, modal con scroll, hoja única de reglas `@media (max-width: 480px)` (antes había tres bloques dispersos) y una segunda para landscape.
 
+### Un problema más que solo aparece en el teléfono real
+
+Con el APK instalado y tocado en el dispositivo salió un fallo que en el emulador no se notaba: al responder una pregunta, el "Correcto/Incorrecto" y el botón "Siguiente" quedan por debajo del borde inferior, porque las cuatro opciones ocupan casi toda la pantalla. Lo único que cambia es el color de la opción, así que la app parece no haber arrancado y no hay ninguna señal de cuál es el siguiente paso. Ahora, al responder, el bloque con el veredicto y el botón se trae a la vista (centrado si cabe; si no, con su parte alta bajo el cronómetro fijo). Solo en móvil: en escritorio el salto distraería y no hace falta. Cuidado con un detalle al implementarlo: "Terminar sesión" de la barra superior también es `data-action="finish-session"`, así que el botón de avanzar es el **último** de los dos; si se coge el primero, el cálculo cree que ya está todo a la vista y no se mueve nada.
+
 ### Verificación
 
 Auditoría de maquetación con navegador real a 320, 360 y 414 px: cero scroll horizontal (recorriendo los 303 ítems del proyecto y las 64 pantallas/conjuntos de datos), cero controles por debajo de 32 px, cero errores JS. Los flujos de CE (planeación → escritura → resultados con rúbrica), de Exprés con tiempo agotado, el de progreso con sus modales y el horizontal también se probaron en pantalla táctil. En escritorio (1280 px) se verificó que las tablas siguen entrando sin scroll y que nada cambió de aspecto.
+
+Sobre el teléfono de verdad (TECNO KJ5, Android 13, 720×1612 px): APK compilado e instalado, y probados con el dedo el arranque, el menú de Exprés, el avance entre preguntas, el cronómetro que queda fijo al desplazar, las imágenes de los cuadernillos, los desplegables con su flecha y el desplazamiento lateral de una tabla (la primera columna se queda fija mientras se arrastra). El ajuste del feedback descrito arriba se confirmó en el dispositivo, no solo en el emulador.
 
 `npm run auditar` (la verificación de datos de la ronda 5) sigue pasando sin fallos: los cambios de esta ronda son de presentación y no tocaron ni una clave ni un enunciado.

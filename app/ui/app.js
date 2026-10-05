@@ -528,6 +528,29 @@ window.SESP.ui = (function () {
     state.answered = true;
     state.lastAnswer = answer;
     render();
+    revealAnswer();
+  }
+
+  // En un teléfono, las opciones ocupan casi toda la pantalla: cuando se responde, el
+  // "Correcto/Incorrecto" y el botón de siguiente quedan por debajo del borde y lo
+  // único que cambia es el color de la opción, así que parece que la app no arrancó.
+  // Se trae el bloque a la vista sin mover nada cuando ya cabe. En escritorio no hace
+  // falta (todo se ve a la vez) y el salto distraería, así que se limita a móvil.
+  function revealAnswer() {
+    if (window.innerWidth > 720) return;
+    const feedback = document.querySelector(".feedback");
+    if (!feedback) return;
+    // "Terminar sesión" de la barra superior también es data-action="finish-session":
+    // el botón de avanzar es el último de los dos.
+    const candidatos = document.querySelectorAll('[data-action="next-question"],[data-action="finish-session"]');
+    const next = candidatos[candidatos.length - 1] || null;
+    const arriba = feedback.getBoundingClientRect().top;
+    const abajo = (next || feedback).getBoundingClientRect().bottom;
+    const alto = window.innerHeight;
+    if (arriba >= 0 && abajo <= alto) return;
+    const bloque = abajo - arriba;
+    if (bloque + 40 < alto) window.scrollBy({ top: arriba - (alto - bloque) / 2, behavior: "smooth" });
+    else window.scrollBy({ top: arriba - 90, behavior: "smooth" }); // 90 px dejan libre el cronómetro fijo
   }
 
   function goNext() {

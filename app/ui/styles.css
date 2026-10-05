@@ -19,18 +19,34 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Sin esto, Safari en landscape (iPhone) reescala el texto y descuadra todo. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  /* Cualquier palabra larga (la URL de origen de una gráfica, un correo, un
+     identificador) que no se pueda cortar por espacios hace que la página entera
+     se desplace de lado en un teléfono. Con esto se parte la línea. */
+  overflow-wrap: break-word;
+  /* Evita que un toque doble sobre un botón lo convierta en zoom, y que la página
+     "arrastre" hacia atrás al deslizar sobre el cronómetro. */
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
 }
 
 #app {
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  /* env() vale 0 fuera de una pantalla con notch/barra de gestos, así que esto no
+     cambia nada en escritorio. */
+  padding: calc(24px + env(safe-area-inset-top)) 16px calc(64px + env(safe-area-inset-bottom));
 }
 
 h1, h2, h3 {
@@ -113,10 +129,6 @@ button, select, textarea, input {
   gap: 12px;
 }
 
-@media (max-width: 480px) {
-  .mode-grid { grid-template-columns: 1fr; }
-}
-
 .mode-card {
   appearance: none;
   background: var(--surface);
@@ -151,6 +163,7 @@ button, select, textarea, input {
 
 select, textarea {
   appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   background: var(--surface-2);
   color: var(--text);
@@ -158,6 +171,21 @@ select, textarea {
   border-radius: var(--radius);
   padding: 10px;
   font-size: 1em;
+}
+
+/* Sin `appearance: none` no hay flecha, y con el fondo del navegador la flecha
+   propia sería invisible en modo oscuro. Se dibuja aquí como SVG en línea: el
+   desplegable sigue siendo el nativo al tocarlo (el selector del sistema). */
+select {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+select option {
+  background: var(--surface);
+  color: var(--text);
 }
 
 select:focus, textarea:focus, .option:focus-visible, .btn:focus-visible {
@@ -261,15 +289,44 @@ table {
   color: var(--text);
 }
 
+/* Las tablas de los cuadernillos tienen hasta 7 columnas y no caben en 320 px.
+   Sin este contenedor, la página entera se desplaza de lado y al responder una
+   pregunta se pierde el lugar del texto. Con él, solo se desplaza la tabla. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 10px;
+  /* `contain` evita que el ancho mínimo de la tabla desborde el contenedor padre. */
+  max-width: 100%;
+}
+
+.table-scroll table {
+  margin-top: 0;
+  min-width: 100%;
+  width: max-content;
+}
+
+/* Al desplazar una tabla de 6-7 columnas en un teléfono, sin esto se pierde de vista
+   la primera columna, que es justamente la que dice de qué fila se trata. */
+.table-scroll th:first-child,
+.table-scroll td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface-2);
+}
+
 th, td {
   border: 1px solid var(--border);
   padding: 6px 8px;
   text-align: left;
+  /* Las celdas de datos no.parten la palabra a la mitad ("Desplazamiento" partido). */
+  white-space: nowrap;
 }
 
 th {
   color: var(--text-dim);
   font-weight: 700;
+  white-space: normal;
 }
 
 .prompt {
@@ -477,8 +534,88 @@ th {
   max-width: 420px;
   width: 100%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* Un modal de confirmaciones con dos botones cabe; el de exportar/importar puede
+     no caber en un teléfono alto y sin esto no se alcanzaría el botón de abajo. */
+  max-height: 88vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-box p {
   color: var(--text);
+}
+
+/* =============================================================================
+   Adaptación a pantalla de teléfono
+   -----------------------------------------------------------------------------
+   Todo lo de abajo está pensado para el uso real con el pulgar: la app se usa
+   de pie o en el bus, en pantallas de 320-430 px, y en modo standalone (PWA o
+   APK), donde no hay barra de direcciones que se pueda aprovechar.
+   ============================================================================= */
+@media (max-width: 480px) {
+  /* El título se comía media pantalla en dos líneas. */
+  h1 { font-size: 1.55rem; }
+  h2 { font-size: 1.2rem; }
+
+  .mode-grid { grid-template-columns: 1fr; gap: 8px; }
+  .mode-card { padding: 12px 14px; }
+  .mode-card h3 { margin-bottom: 2px; }
+
+  .card { padding: 16px; }
+
+  /* Nada de fuentes por debajo de 16 px en un campo: por debajo de ese tamaño
+     el navegador móvil hace zoom al enfocar y descuadra la pantalla. */
+  textarea, select { font-size: 16px; }
+
+  /* El ensayo de CE son 30 minutos de escritura con el teclado en pantalla: con el
+     alto por defecto el área queda en cinco líneas y no se ve nada de lo que se
+     está escribiendo. */
+  textarea { min-height: 40vh; }
+
+  /* `.link-btn` medía 27 px de alto: "Terminar sesión" o "← Volver" quedaban
+     pegados al texto de al lado y era fácil fallar el toque. 44 px es el mínimo
+     recomendado para un dedo. */
+  .link-btn {
+    min-height: 44px;
+    padding: 10px 10px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.95em;
+  }
+
+  .pill { font-size: 0.72em; padding: 3px 9px; }
+
+  .timer-bar {
+    gap: 8px;
+    margin-bottom: 12px;
+    /* El cronómetro se queda pegado arriba al desplazar un pasaje largo, que es
+       justo cuando más hace falta verlo: la app entrena velocidad de respuesta. */
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 6px 0;
+    margin-top: calc(-6px);
+    background: var(--bg);
+  }
+
+  .timer-chip { padding: 8px 12px; font-size: 0.95em; }
+
+  .context-box { padding: 12px; }
+  .prompt { font-size: 1.05em; }
+
+  .option { padding: 14px; }
+
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal-box { padding: 16px; }
+}
+
+/* Teléfono en horizontal: la app sigue siendo usable (el manifest pide portrait,
+   pero un PWA instalada se puede rotar en algunos-launchers). */
+@media (max-height: 480px) and (orientation: landscape) {
+  h1 { font-size: 1.3rem; }
+  #app { padding-top: calc(10px + env(safe-area-inset-top)); }
+  .timer-bar { padding: 4px 0; margin-top: -4px; }
+  .modal-box { max-height: 92vh; }
 }

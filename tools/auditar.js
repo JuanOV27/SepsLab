@@ -167,7 +167,13 @@ for (const src of imagenes) {
 const enDisco = fs.existsSync(path.join(APP, "assets/images"))
   ? fs.readdirSync(path.join(APP, "assets/images")).filter((f) => f.endsWith(".png"))
   : [];
-const sinReferenciar = enDisco.filter((f) => !imagenes.some((s) => s.endsWith(f)));
+// Los iconos de la PWA los referencia manifest.json, no un contexto de pregunta.
+const manifest = path.join(APP, "manifest.json");
+if (fs.existsSync(manifest)) {
+  const m = JSON.parse(fs.readFileSync(manifest, "utf8"));
+  (m.icons || []).forEach((ic) => imagenes.push(ic.src));
+}
+const sinReferenciar = enDisco.filter((f) => !imagenes.some((src) => src.endsWith(f)));
 sinReferenciar.forEach((f) => avisos.push(`imagen en disco que ningún contexto referencia: ${f}`));
 
 // Explicaciones: cobertura de las preguntas de opción múltiple, sin huérfanas.

@@ -1,13 +1,16 @@
 {
   "name": "sesp",
   "version": "1.0.0",
-  "description": "",
+  "description": "Practica para el examen Saber Pro (Colombia). App web estatica, empaquetable como PWA y como APK con Capacitor.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "auditar": "node tools/auditar.js",
+    "servidor": "python3 -m http.server 8420 --directory app",
+    "sync": "cap sync android",
+    "apk": "cap sync android && cd android && ./gradlew assembleDebug"
   },
   "repository": {
     "type": "git",

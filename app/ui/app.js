@@ -93,9 +93,25 @@ window.SESP.ui = (function () {
 
   // ---------- ciclo de render ----------
 
+  // Volver arriba no en cada render(), sino solo cuando cambia la pantalla o la
+  // pregunta: render() también se dispara al responder (para pintar el feedback) y
+  // en ese caso saltaría al passage mientras se está leyendo la explicación.
+  let lastRenderKey = null;
+
+  function currentRenderKey() {
+    const s = state.session;
+    // La sesión de ensayo (CE) no tiene cola de preguntas: getCurrentQuestion
+    // explotaría con ella, así que aquí no se pregunta.
+    const q = s && s.questions ? engine.getCurrentQuestion(s) : null;
+    return `${state.screen}|${state.modeId}|${q ? q.id : "-"}`;
+  }
+
   function render() {
     stopTick();
     if (!root) return;
+    const key = currentRenderKey();
+    const changed = key !== lastRenderKey;
+    lastRenderKey = key;
     if (state.screen === "home") root.innerHTML = renderHome();
     else if (state.screen === "modeConfig") root.innerHTML = renderModeConfig();
     else if (state.screen === "question") { root.innerHTML = renderQuestion(); startTick(); }
@@ -105,6 +121,9 @@ window.SESP.ui = (function () {
     else if (state.screen === "timeUp") root.innerHTML = renderTimeUp();
     else if (state.screen === "progress") root.innerHTML = renderProgress();
     else root.innerHTML = renderHome();
+    // En el teléfono es obligatorio: se lee un pasaje largo con el pulgar y al
+    // pasar a la pregunta siguiente el texto nuevo saldría a media pantalla.
+    if (changed) window.scrollTo(0, 0);
   }
 
   function startTick() {
@@ -415,7 +434,10 @@ window.SESP.ui = (function () {
     if (context.table) {
       const headerRow = context.table.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
       const bodyRows = context.table.rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("");
-      tableHtml = `<table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+      // La tabla va dentro de un contenedor con scroll propio: las de los cuadernillos
+      // tienen hasta 7 columnas y no caben en un teléfono. Sin esto, la página entera
+      // se desplaza de lado y se pierde el lugar del texto al leerla.
+      tableHtml = `<div class="table-scroll"><table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
     }
     let imageHtml = "";
     if (context.image) {
@@ -476,8 +498,8 @@ window.SESP.ui = (function () {
         feedbackHtml += `<div class="explanation"><h4>${heading}</h4><p>${escapeHtml(explanation)}</p></div>`;
       }
       nextButtonHtml = canContinue()
-        ? `<button class="btn" data-action="next-question">Siguiente</button>`
-        : `<button class="btn" data-action="finish-session">Ver resultados</button>`;
+        ? `<button class="btn btn-block" data-action="next-question">Siguiente</button>`
+        : `<button class="btn btn-block" data-action="finish-session">Ver resultados</button>`;
     }
 
     const totalTimerHtml = session.totalTimeLimitMs != null
@@ -549,8 +571,8 @@ window.SESP.ui = (function () {
     const meta = moduleMeta("CE");
     const phaseLabel = session.phase === "planning" ? "Planeación" : "Escritura";
     const phaseActionHtml = session.phase === "planning"
-      ? `<button class="btn btn-secondary" data-action="essay-advance-phase">Pasar a escritura ahora</button>`
-      : `<button class="btn" data-action="essay-finish">Terminar</button>`;
+      ? `<button class="btn btn-secondary btn-block" data-action="essay-advance-phase">Pasar a escritura ahora</button>`
+      : `<button class="btn btn-block" data-action="essay-finish">Terminar</button>`;
 
     return `
       <div class="top-actions"><button class="link-btn" data-action="go-home">Salir</button></div>
@@ -804,9 +826,25 @@ window.SESP.ui = (function () {
   }
 
   // Genera el archivo de respaldo y dispara la descarga del navegador (sin servidor).
+  //
+  // Salvedad importante en el móvil: dentro del WebView de la app instalada (o de
+  // una PWA en Android) una descarga de un blob no hace nada visible, porque no hay
+  // interfaz de descargas del navegador. Antes que fallar en silencio, ahí se muestra
+  // el JSON en un cuadro de texto para copiarlo (a un correo, a Drive, a notas).
   function exportProgress() {
     const data = storage.exportData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const texto = JSON.stringify(data, null, 2);
+    const enWebViewNativo = !!(window.Capacitor && window.Capacitor.isNativePlatform
+      && window.Capacitor.isNativePlatform());
+    if (enWebViewNativo) {
+      showModal(`
+        <p class="muted">Copia este texto y guárdalo donde quieras (por ejemplo, en un correo o en Drive). Es el respaldo de tu progreso.</p>
+        <textarea readonly style="min-height:40vh;font-size:12px;">${escapeHtml(texto)}</textarea>
+        <button class="btn btn-block" data-modal-action="close">Entendido</button>
+      `);
+      return;
+    }
+    const blob = new Blob([texto], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

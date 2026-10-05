@@ -6,6 +6,10 @@ window.SESP.core = window.SESP.core || {};
 window.SESP.core.storage = (function () {
   const SESSIONS_KEY = "sesp.sessions.v1";
   const REVIEW_KEY = "sesp.review.v1";
+  const SESSION_KEY = "sesp.session.v1";
+  const REMEMBER_KEY = "sesp_user";
+  const GAME_KEY = "sesp.game.v1";
+  const PREFS_KEY = "sesp.prefs.v1";
 
   function readJSON(key, fallback) {
     try {
@@ -107,6 +111,8 @@ window.SESP.core.storage = (function () {
       exportedAt: new Date().toISOString(),
       sessions: getSessions(),
       reviewState: getReviewState(),
+      game: getGame(),
+      prefs: getPrefs(),
     };
   }
 
@@ -140,7 +146,121 @@ window.SESP.core.storage = (function () {
     });
     writeJSON(REVIEW_KEY, existingReview);
 
+    // Gamificación: quedarse con el de mayor XP para no perder progreso.
+    if (data.game && typeof data.game === "object") {
+      const current = getGame();
+      if ((data.game.xp || 0) > (current.xp || 0)) saveGame(Object.assign(defaultGame(), data.game));
+    }
+
+    if (data.prefs && typeof data.prefs === "object") savePrefs(data.prefs);
+
     return { sessionsCount: mergedSessions.length, reviewCount: Object.keys(existingReview).length };
+  }
+
+  // ---------- auth local (login solo front, sin servidor) ----------
+  // La sesión actual vive en localStorage para que al recargar siga logueado.
+  // El progreso (sesiones/repaso) NO se borra al cerrar sesión: es por navegador.
+  function getCurrentUser() {
+    return readJSON(SESSION_KEY, null);
+  }
+
+  function setCurrentUser(userObj) {
+    writeJSON(SESSION_KEY, userObj);
+    return userObj;
+  }
+
+  function clearCurrentUser() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (err) { /* noop */ }
+  }
+
+  function getRememberedUser() {
+    try { return localStorage.getItem(REMEMBER_KEY) || ""; } catch (err) { return ""; }
+  }
+
+  function setRememberedUser(username) {
+    try {
+      if (username) localStorage.setItem(REMEMBER_KEY, username);
+      else localStorage.removeItem(REMEMBER_KEY);
+    } catch (err) { /* noop */ }
+  }
+
+  // ---------- gamificación local (XP, racha, avatar) ----------
+  function defaultGame() {
+    return { xp: 0, streak: 0, lastLoginDate: null, avatar: "🧪", logins: 0 };
+  }
+
+  function getGame() {
+    const g = readJSON(GAME_KEY, null);
+    if (!g || typeof g !== "object") return defaultGame();
+    return Object.assign(defaultGame(), g);
+  }
+
+  function saveGame(game) {
+    writeJSON(GAME_KEY, game);
+    return game;
+  }
+
+  function levelForXp(xp) {
+    return Math.floor((xp || 0) / 100) + 1;
+  }
+
+  function setAvatar(emoji) {
+    const g = getGame();
+    g.avatar = emoji;
+    return saveGame(g);
+  }
+
+  function todayStr(d) {
+    const d2 = d || new Date();
+    return d2.toISOString().slice(0, 10);
+  }
+
+  // Premio por entrar: +25 XP base, +5 por día de racha (tope +50).
+  // Re-entrar el mismo día solo da +5 y no rompe la racha.
+  function awardLogin() {
+    const g = getGame();
+    const today = todayStr();
+    const yesterday = todayStr(new Date(Date.now() - 86400000));
+    const beforeLevel = levelForXp(g.xp);
+    let gained = 0;
+    if (g.lastLoginDate === today) {
+      gained = 5;
+    } else if (g.lastLoginDate === yesterday) {
+      g.streak += 1;
+      gained = 25 + Math.min(g.streak * 5, 50);
+    } else {
+      g.streak = 1;
+      gained = 25;
+    }
+    g.xp += gained;
+    g.logins += 1;
+    g.lastLoginDate = today;
+    saveGame(g);
+    const afterLevel = levelForXp(g.xp);
+    return { game: g, gained, leveledUp: afterLevel > beforeLevel, level: afterLevel };
+  }
+
+  // ---------- preferencias de accesibilidad y tema ----------
+  // theme: "dark" | "light" · fontScale: 1 | 1.125 | 1.25 · highContrast: bool
+  function defaultPrefs() {
+    return { theme: "dark", fontScale: 1, highContrast: false };
+  }
+
+  function getPrefs() {
+    const p = readJSON(PREFS_KEY, null);
+    if (!p || typeof p !== "object") return defaultPrefs();
+    const d = defaultPrefs();
+    return {
+      theme: p.theme === "light" ? "light" : "dark",
+      fontScale: [1, 1.125, 1.25].indexOf(p.fontScale) >= 0 ? p.fontScale : 1,
+      highContrast: !!p.highContrast,
+    };
+  }
+
+  function savePrefs(prefs) {
+    const merged = Object.assign(defaultPrefs(), prefs || {});
+    writeJSON(PREFS_KEY, merged);
+    return merged;
   }
 
   return {
@@ -151,5 +271,17 @@ window.SESP.core.storage = (function () {
     clearAll,
     exportData,
     importData,
+    getPrefs,
+    savePrefs,
+    getCurrentUser,
+    setCurrentUser,
+    clearCurrentUser,
+    getRememberedUser,
+    setRememberedUser,
+    getGame,
+    saveGame,
+    setAvatar,
+    levelForXp,
+    awardLogin,
   };
 })();

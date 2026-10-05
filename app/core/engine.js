@@ -62,13 +62,16 @@ window.SESP.core.engine = (function () {
     const isScored = question.kind === "single-select";
     const targetMs = session.moduleTimers[question.module] != null ? session.moduleTimers[question.module] : null;
 
+    // Si la pregunta aún no tiene clave (correctOption null), no se califica:
+    // se registra tiempo y respuesta, pero correct queda null (igual que CE).
+    const scorable = isScored && question.correctOption != null;
     const answer = {
       questionId: question.id,
       module: question.module,
       competencia: question.competencia || null,
       kind: question.kind,
       selectedOption: selectedOption,
-      correct: isScored ? selectedOption === question.correctOption : null,
+      correct: scorable ? selectedOption === question.correctOption : null,
       timeMs: timeMs,
       targetMs: targetMs,
       answeredAt: new Date(now).toISOString(),

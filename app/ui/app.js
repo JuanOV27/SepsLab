@@ -11,9 +11,28 @@ window.SESP.ui = (function () {
 
   let root = null;
   let tickHandle = null;
-  let state = { screen: "home" };
+  let state = { screen: "login" };
   let modalEl = null;
   let pendingConfirmCallback = null;
+  let pendingAvatar = null;
+  let pendingReward = null;
+  let answerStreak = 0;
+  let toastTimer = null;
+
+  const AVATARS = ["🧪", "🚀", "🧠", "⚡", "🎯", "👾"];
+  const DAILY_TIPS = [
+    "Lea la pregunta completa antes de revisar las opciones de respuesta.",
+    "Descarte primero la opción evidentemente incorrecta.",
+    "Si supera los 100 segundos, marque la pregunta y retómela después.",
+    "En Lectura Crítica, identifique la idea principal de cada párrafo.",
+    "En Razonamiento Cuantitativo, estime el orden de magnitud antes de calcular.",
+    "La gestión del tiempo también se entrena: observe el cronómetro visible.",
+    "El repaso de errores concentra el mayor valor formativo."
+  ];
+
+  function dailyTip() {
+    return DAILY_TIPS[new Date().getDate() % DAILY_TIPS.length];
+  }
 
   function moduleMeta(id) {
     return modules.find((m) => m.id === id);
@@ -91,12 +110,133 @@ window.SESP.ui = (function () {
     return `${m}:${String(s).padStart(2, "0")}`;
   }
 
+  // ---------- preferencias: tema, tamaño de texto y contraste ----------
+  function getPrefs() {
+    try { return storage.getPrefs(); } catch (err) { return { theme: "dark", fontScale: 1, highContrast: false }; }
+  }
+
+  function applyPrefs() {
+    const p = getPrefs();
+    try {
+      document.documentElement.dataset.theme = p.theme;
+      document.documentElement.dataset.contrast = p.highContrast ? "high" : "normal";
+      document.documentElement.style.fontSize = (16 * p.fontScale) + "px";
+    } catch (err) { /* noop */ }
+    return p;
+  }
+
+  function fontLabel(scale) {
+    return scale >= 1.25 ? "Texto: muy grande" : scale >= 1.125 ? "Texto: grande" : "Texto: normal";
+  }
+
+  function controlsHtml() {
+    const p = getPrefs();
+    const isLight = p.theme === "light";
+    const themeSvg = isLight
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+    return `
+      <span class="a11y-controls" role="group" aria-label="Apariencia y accesibilidad">
+        <button class="chip-btn" data-action="toggle-theme" title="${isLight ? "Cambiar a modo oscuro" : "Cambiar a modo claro"}" aria-label="${isLight ? "Cambiar a modo oscuro" : "Cambiar a modo claro"}">${themeSvg}</button>
+        <button class="chip-btn" data-action="cycle-font" title="Tamaño de texto: ${fontLabel(p.fontScale).toLowerCase()}. Activar para cambiar." aria-label="Cambiar tamaño de texto. Actual: ${fontLabel(p.fontScale).toLowerCase()}"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" text-anchor="middle" font-size="14" font-weight="800" fill="currentColor">A</text></svg></button>
+        <button class="chip-btn${p.highContrast ? " is-on" : ""}" data-action="toggle-contrast" title="Alto contraste: ${p.highContrast ? "activado" : "desactivado"}" aria-label="Alternar alto contraste" aria-pressed="${p.highContrast}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg></button>
+      </span>
+    `;
+  }
+
+  // Micro-celebración sobria de rachas, sin confeti: toast inferior que se disipa solo.
+  function showStreakToast(streak) {
+    try {
+      let msg = null;
+      if (streak === 3) msg = "Racha de 3 aciertos seguidos. Vas bien.";
+      else if (streak === 5) msg = "¡5 seguidas! Ritmo de examen real.";
+      else if (streak === 8) msg = "¡8 seguidas! Nivel avanzado.";
+      else if (streak > 8 && streak % 5 === 0) msg = "¡" + streak + " seguidas! Imparable.";
+      if (!msg) return;
+      let toast = document.getElementById("streak-toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "streak-toast";
+        toast.setAttribute("role", "status");
+        document.body.appendChild(toast);
+      }
+      toast.innerHTML = `<span class="streak-star" aria-hidden="true">★</span> ${escapeHtml(msg)}`;
+      toast.classList.remove("show");
+      void toast.offsetWidth;
+      toast.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 2300);
+    } catch (err) { /* noop */ }
+  }
+
   // ---------- ciclo de render ----------
+
+  let spotTimer = null;
+  let spotIndex = 0;
+
+  function stopSpotlight() {
+    if (spotTimer) { clearInterval(spotTimer); spotTimer = null; }
+  }
+
+  function goSpot(i) {
+    spotIndex = ((i % 3) + 3) % 3;
+    document.querySelectorAll(".spot-slide").forEach((s) => s.classList.toggle("is-active", Number(s.dataset.slide) === spotIndex));
+    document.querySelectorAll(".spot-dot").forEach((d) => d.classList.toggle("is-active", Number(d.dataset.slide) === spotIndex));
+    const fill = document.getElementById("spot-progress-fill");
+    if (fill) { fill.style.animation = "none"; void fill.offsetWidth; fill.style.animation = ""; }
+  }
+
+  function startSpotlight() {
+    // Sin uso en el login minimal: se conserva por compatibilidad.
+    stopSpotlight();
+  }
+
+  // Consejo destacado del login: tarjeta con rotación automática.
+  let tipTimer = null;
+  let tipIndex = 0;
+
+  function stopLoginTip() {
+    if (tipTimer) { clearInterval(tipTimer); tipTimer = null; }
+  }
+
+  function paintTip(dir) {
+    const textEl = document.getElementById("login-tip-text");
+    if (!textEl) return;
+    textEl.textContent = DAILY_TIPS[tipIndex];
+    textEl.classList.remove("tip-slide-left", "tip-slide-right");
+    void textEl.offsetWidth;
+    textEl.classList.add(dir < 0 ? "tip-slide-left" : "tip-slide-right");
+  }
+
+  function startLoginTip(keepIndex) {
+    stopLoginTip();
+    const textEl = document.getElementById("login-tip-text");
+    if (!textEl) return;
+    if (!keepIndex) {
+      tipIndex = new Date().getDate() % DAILY_TIPS.length;
+      paintTip(1);
+    }
+    tipTimer = setInterval(() => {
+      if (state.screen !== "login") { stopLoginTip(); return; }
+      const box = document.getElementById("login-tip");
+      if (!box) return;
+      if (box.matches(":hover")) return; // pausa al pasar el cursor
+      tipIndex = (tipIndex + 1) % DAILY_TIPS.length;
+      paintTip(1);
+    }, 6000);
+  }
 
   function render() {
     stopTick();
+    stopSpotlight();
+    stopLoginTip();
     if (!root) return;
-    if (state.screen === "home") root.innerHTML = renderHome();
+    // Puerta de entrada: sin sesión no se muestra nada más.
+    if (state.screen !== "login") {
+      try { if (!storage.getCurrentUser()) state = { screen: "login" }; } catch (err) { state = { screen: "login" }; }
+    }
+    if (state.screen === "login") { root.innerHTML = renderLogin(); startLoginTip(); }
+    else if (state.screen === "home") root.innerHTML = renderHome();
     else if (state.screen === "modeConfig") root.innerHTML = renderModeConfig();
     else if (state.screen === "question") { root.innerHTML = renderQuestion(); startTick(); }
     else if (state.screen === "essay") { root.innerHTML = renderEssay(); startTick(); }
@@ -143,6 +283,8 @@ window.SESP.ui = (function () {
     }
   }
 
+  // Cuenta regresiva por pregunta (toque gamificado): muestra lo que QUEDA del
+  // tiempo objetivo con una barra que se vacía; al agotarse cuenta el overtime.
   function updateQuestionTimers() {
     const session = state.session;
     const qTimerEl = document.getElementById("question-timer");
@@ -150,8 +292,33 @@ window.SESP.ui = (function () {
       const q = engine.getCurrentQuestion(session);
       const target = session.moduleTimers ? session.moduleTimers[q.module] : null;
       const elapsed = engine.getElapsedForCurrentQuestionMs(session);
-      qTimerEl.textContent = fmtMs(elapsed);
-      qTimerEl.className = "timer-chip " + (target == null ? "" : elapsed <= target ? "fast" : elapsed <= target * 1.3 ? "slow" : "over");
+      if (target == null) {
+        qTimerEl.textContent = fmtMs(elapsed);
+        qTimerEl.className = "timer-chip";
+      } else {
+        const remaining = target - elapsed;
+        if (remaining > target * 0.3) {
+          qTimerEl.textContent = "⏳ " + fmtCountdown(remaining);
+          qTimerEl.className = "timer-chip fast";
+        } else if (remaining > 0) {
+          qTimerEl.textContent = "🔥 " + fmtCountdown(remaining) + " ¡date prisa!";
+          qTimerEl.className = "timer-chip slow";
+        } else {
+          qTimerEl.textContent = "⏰ +" + fmtMs(-remaining) + " de más";
+          qTimerEl.className = "timer-chip over";
+        }
+      }
+      const fillEl = document.getElementById("countdown-fill");
+      if (fillEl) {
+        if (target == null) {
+          fillEl.style.width = "100%";
+          fillEl.className = "countdown-fill";
+        } else {
+          const pct = Math.max(0, Math.min(100, ((target - elapsed) / target) * 100));
+          fillEl.style.width = pct + "%";
+          fillEl.className = "countdown-fill " + (pct > 30 ? "fast" : pct > 0 ? "slow" : "over");
+        }
+      }
     }
     const totalTimerEl = document.getElementById("total-timer");
     if (totalTimerEl && session.totalTimeLimitMs != null) {
@@ -179,37 +346,250 @@ window.SESP.ui = (function () {
     }
   }
 
+  // ---------- pantalla: login ----------
+
+  function currentUser() {
+    try { return storage.getCurrentUser(); } catch (err) { return null; }
+  }
+
+  function gameHudHtml(compact) {
+    let g;
+    try { g = storage.getGame(); } catch (err) { g = { xp: 0, streak: 0, avatar: "🧪", logins: 0 }; }
+    const level = storage.levelForXp ? storage.levelForXp(g.xp) : Math.floor((g.xp || 0) / 100) + 1;
+    const pct = ((g.xp || 0) % 100);
+    const next = 100 - pct;
+    return `
+      <div class="game-hud${compact ? " compact" : ""}">
+        <div class="avatar-badge" aria-hidden="true">${escapeHtml(pendingAvatar || g.avatar || "🧪")}</div>
+        <div class="game-info">
+          <div class="game-top"><span class="level-badge">Nivel ${level}</span><span class="streak" title="Días consecutivos de estudio">Constancia: ${g.streak || 0} día${(g.streak || 0) === 1 ? "" : "s"}</span></div>
+          <div class="xp-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="${g.xp || 0} puntos acumulados"><div class="xp-fill" style="width:${pct}%"></div></div>
+          <div class="xp-label">${pct}/100 puntos · ${next} para el Nivel ${level + 1} · Total: ${g.xp || 0}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderLogin() {
+    let remembered = "";
+    try { remembered = storage.getRememberedUser() || ""; } catch (err) { remembered = ""; }
+    try {
+      const g = storage.getGame();
+      if (!pendingAvatar) pendingAvatar = g.avatar || "🧪";
+    } catch (err) { if (!pendingAvatar) pendingAvatar = "🧪"; }
+    return `
+      <div class="login-minimal academic">
+        <div class="login-topbar anim-in" style="--d:0s">${controlsHtml()}</div>
+        <header class="login-brand anim-in" style="--d:.05s">
+          <img class="logo logo-animated" src="assets/images/logo.png" alt="Logotipo institucional de SepsLab" onerror="this.outerHTML='<div class=&quot;logo-fallback&quot; aria-hidden=&quot;true&quot;>SL</div>'">
+          <p class="brand-kicker">Plataforma de preparación · Saber Pro</p>
+          <h1>SepsLab</h1>
+          <p class="muted">Práctica con cuadernillos oficiales del ICFES</p>
+        </header>
+        <main class="card login-card login-pro anim-in" style="--d:.15s" aria-label="Acceso a la plataforma">
+          <h2 class="login-title">Iniciar sesión</h2>
+          <div id="login-error-box" class="error-summary" role="alert"></div>
+          <form id="login-form" novalidate>
+            <div class="field">
+              <label for="login-username">Usuario o correo electrónico</label>
+              <div class="input-wrap"><svg class="input-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><input type="text" id="login-username" autocomplete="username" inputmode="email" placeholder="usuario@correo.com" value="${escapeHtml(remembered)}"></div>
+              <div class="field-error" id="login-uErr"></div>
+            </div>
+            <div class="field">
+              <label for="login-password">Contraseña</label>
+              <div class="input-group input-wrap"><svg class="input-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input type="password" id="login-password" autocomplete="current-password" placeholder="Ingrese su contraseña">
+                <button type="button" class="icon-btn" data-action="toggle-password" aria-label="Mostrar contraseña" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+              </div>
+              <div class="caps-warn" id="capsWarn">Bloq Mayús activado — revise su contraseña.</div>
+              <div class="field-error" id="login-pErr"></div>
+            </div>
+            <div class="row-between">
+              <label class="check"><input type="checkbox" id="login-remember" ${remembered ? "checked" : ""}> Mantener la sesión iniciada</label>
+              <button type="button" class="link-btn" data-action="login-forgot">¿Olvidó su contraseña?</button>
+            </div>
+            <button type="submit" class="btn btn-block btn-arrow" id="login-submit"><span class="label">Ingresar a la plataforma</span><span class="spinner" aria-hidden="true"></span></button>
+          </form>
+          <div class="divider"><span>o continúe sin una cuenta</span></div>
+          <button type="button" class="btn btn-secondary btn-block" data-action="login-guest">Explorar como invitado</button>
+          <ul class="trust-list" aria-label="Garantías del servicio">
+            <li>Datos almacenados únicamente en este navegador</li>
+            <li>Preguntas oficiales ICFES 2018 y simulacro 2026-2</li>
+          </ul>
+        </main>
+        <footer class="login-footer anim-in" style="--d:.25s">
+          <div class="tip-card" id="login-tip" aria-live="polite">
+            <svg class="tip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+            <div class="tip-body">
+              <p class="tip-kicker">Consejo de estudio</p>
+              <p class="tip-text" id="login-tip-text"></p>
+            </div>
+          </div>
+          <p class="muted">© 2026 SepsLab · Uso académico y formativo</p>
+        </footer>
+      </div>
+      <div id="reward-overlay" aria-live="polite"></div>
+    `;
+  }
+
+  function loginFail(fieldErrId, msg, inputEl) {
+    const el = document.getElementById(fieldErrId);
+    if (el) el.textContent = msg;
+    if (inputEl) inputEl.setAttribute("aria-invalid", "true");
+  }
+
+  function clearLoginError(inputEl, errId) {
+    if (inputEl) inputEl.removeAttribute("aria-invalid");
+    const el = document.getElementById(errId);
+    if (el) el.textContent = "";
+  }
+
+  function doLogin() {
+    const uEl = document.getElementById("login-username");
+    const pEl = document.getElementById("login-password");
+    const rEl = document.getElementById("login-remember");
+    const box = document.getElementById("login-error-box");
+    const btn = document.getElementById("login-submit");
+    if (!uEl || !pEl) return;
+    if (box) { box.classList.remove("show"); box.textContent = ""; }
+    const uv = uEl.value.trim();
+    const pv = pEl.value;
+    let ok = true;
+    clearLoginError(uEl, "login-uErr");
+    clearLoginError(pEl, "login-pErr");
+    if (!uv) { loginFail("login-uErr", "Ingrese su usuario o correo electrónico.", uEl); ok = false; }
+    else if (uv.includes("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(uv)) { loginFail("login-uErr", "El correo electrónico no es válido.", uEl); ok = false; }
+    if (pv.length < 6) { loginFail("login-pErr", "La contraseña debe tener mínimo 6 caracteres.", pEl); ok = false; }
+    if (!ok) {
+      if (box) { box.textContent = "Revise los campos marcados."; box.classList.add("show"); }
+      return;
+    }
+    if (btn) { btn.classList.add("loading"); btn.disabled = true; }
+    // Auth local simulada: cualquier credencial válida entra. Sin servidor.
+    setTimeout(() => {
+      let reward = null;
+      try {
+        if (pendingAvatar) storage.setAvatar(pendingAvatar);
+        reward = storage.awardLogin();
+        if (reward && reward.game) reward.game.avatar = pendingAvatar || reward.game.avatar;
+        storage.setCurrentUser({ user: uv, ts: new Date().toISOString(), guest: false, avatar: pendingAvatar });
+        storage.setRememberedUser(rEl && rEl.checked ? uv : "");
+      } catch (err) { /* noop */ }
+      if (reward) showReward(reward);
+      else { state = { screen: "home" }; render(); }
+    }, 450);
+  }
+
+  function loginAsGuest() {
+    let reward = null;
+    try {
+      if (pendingAvatar) storage.setAvatar(pendingAvatar);
+      reward = storage.awardLogin();
+      storage.setCurrentUser({ user: "invitado", ts: new Date().toISOString(), guest: true, avatar: pendingAvatar });
+    } catch (err) { /* noop */ }
+    if (reward && document.getElementById("reward-overlay")) showReward(reward);
+    else { state = { screen: "home" }; render(); }
+  }
+
+  function logout() {
+    try { storage.clearCurrentUser(); } catch (err) { /* noop */ }
+    state = { screen: "login" };
+    render();
+  }
+
+  function showReward(reward) {
+    pendingReward = reward;
+    const overlay = document.getElementById("reward-overlay");
+    if (!overlay) {
+      state = { screen: "home" };
+      render();
+      return;
+    }
+    const r = reward;
+    overlay.innerHTML = `
+      <div class="reward-card" role="dialog" aria-label="Constancia registrada">
+        <div class="reward-avatar">${escapeHtml((r.game && r.game.avatar) || "🧪")}</div>
+        <h3>Constancia registrada: +${r.gained} puntos</h3>
+        <p class="muted">Días consecutivos de estudio: <strong>${r.game.streak}</strong>${r.leveledUp ? ` · Ha alcanzado el <strong>Nivel ${r.level}</strong>.` : ""}</p>
+        <button class="btn btn-block" data-action="reward-continue">Continuar a la plataforma</button>
+      </div>
+    `;
+    overlay.classList.add("show");
+    // Enfoque académico: sin confeti, transición sobria.
+    setTimeout(() => {
+      if (pendingReward) { pendingReward = null; state = { screen: "home" }; render(); }
+    }, 3200);
+  }
+
   // ---------- pantalla: inicio ----------
 
   function renderHome() {
     const dueCount = storage.getDueReviewQuestionIds(null).length;
     const sessionsCount = storage.getSessions().length;
+    const user = currentUser();
+    const userLabel = user ? escapeHtml(user.user) : "invitado";
+    const guestTag = user && user.guest ? ` <span class="muted">(invitado)</span>` : "";
+    let homeGame = "";
+    try {
+      const g = storage.getGame();
+      const avatar = (user && user.avatar) || g.avatar || "🧪";
+      pendingAvatar = avatar;
+      const level = storage.levelForXp(g.xp);
+      const pct = ((g.xp || 0) % 100);
+      homeGame = `
+      <div class="card game-hud home-hud">
+        <div class="avatar-badge">${escapeHtml(avatar)}</div>
+        <div class="game-info">
+          <div class="game-top"><span class="level-badge">Nivel ${level}</span><span class="streak">Constancia: ${g.streak || 0} días · ${g.xp || 0} puntos</span></div>
+          <div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
+        </div>
+      </div>`;
+    } catch (err) { homeGame = ""; }
     return `
-      <h1>SESP — Práctica Saber Pro</h1>
-      <p class="muted">Preguntas reales de cuadernillos oficiales del ICFES. Elige un modo para empezar.</p>
+      <div class="top-actions home-bar" style="justify-content:space-between; align-items:center;">
+        <span class="muted">Hola, <strong style="color:var(--text);">${userLabel}</strong>${guestTag}</span>
+        <span class="home-tools">${controlsHtml()}<button class="link-btn" data-action="logout">Cerrar sesión</button></span>
+      </div>
+      ${homeGame}
+      <div class="home-brand">
+        <img src="assets/images/logo.png" alt="Logo SepsLab" onerror="this.style.display='none'">
+        <div><h1 style="margin:0;">SepsLab — Práctica Saber Pro</h1></div>
+      </div>
+      <p class="muted">Preguntas reales de cuadernillos oficiales ICFES 2018. Elige un modo para empezar.</p>
+      <div class="guide-steps anim-in" style="--d:.08s" aria-label="Cómo funciona">
+        <div class="guide-step is-now"><b>1</b><span>Elige un modo</span></div>
+        <div class="guide-step"><b>2</b><span>Configura</span></div>
+        <div class="guide-step"><b>3</b><span>Responde</span></div>
+        <div class="guide-step"><b>4</b><span>Revisa y repasa</span></div>
+      </div>
+      <p class="guide-hello anim-in" style="--d:.1s">¿Qué entrenamos hoy? Toca una tarjeta para dar el primer paso.</p>
+      ${dueCount > 0 ? `<button class="resume-banner anim-in" style="--d:.1s" data-action="go-config" data-mode="review"><span>🔁 Tienes <strong>${dueCount} pendiente${dueCount === 1 ? "" : "s"}</strong> de repaso — retoma donde quedaste →</span></button>` : ""}
       <div class="mode-grid">
-        <button class="mode-card" data-action="go-config" data-mode="practice">
-          <h3>Práctica libre</h3>
+        <button class="mode-card anim-in" style="--d:.15s" data-action="go-config" data-mode="practice">
+          <span class="mode-ico" aria-hidden="true">📚</span><h3>Práctica libre</h3>
           <p class="muted">Un módulo (y competencia opcional), sin presión de tiempo.</p>
         </button>
-        <button class="mode-card" data-action="go-config" data-mode="simulation">
-          <h3>Simulacro</h3>
+        <button class="mode-card anim-in" style="--d:.22s" data-action="go-config" data-mode="simulation">
+          <span class="mode-ico" aria-hidden="true">⏱️</span><h3>Simulacro</h3>
           <p class="muted">Un módulo completo al ritmo objetivo del examen, sin pausas.</p>
         </button>
-        <button class="mode-card" data-action="go-config" data-mode="review">
-          <h3>Repaso</h3>
+        <button class="mode-card anim-in" style="--d:.29s" data-action="go-config" data-mode="review">
+          <span class="mode-ico" aria-hidden="true">🔁</span><h3>Repaso ${dueCount > 0 ? `<span class="count-pill">${dueCount}</span>` : ""}</h3>
           <p class="muted">${dueCount} pregunta${dueCount === 1 ? "" : "s"} pendiente${dueCount === 1 ? "" : "s"} de repasar.</p>
         </button>
-        <button class="mode-card" data-action="go-config" data-mode="express">
-          <h3>Modo Exprés</h3>
+        <button class="mode-card anim-in" style="--d:.36s" data-action="go-config" data-mode="express">
+          <span class="mode-ico" aria-hidden="true">⚡</span><h3>Modo Exprés</h3>
           <p class="muted">Sesión de duración fija: 15, 30 o 60 minutos.</p>
         </button>
-        <button class="mode-card" data-action="go-config" data-mode="training">
-          <h3>Entrenamiento</h3>
+        <button class="mode-card anim-in" style="--d:.4s" data-action="go-config" data-mode="training">
+          <span class="mode-ico" aria-hidden="true">🎯</span><h3>Entrenamiento</h3>
           <p class="muted">${modesApi.training.countFor("Todas")} preguntas nuevas con explicación resuelta. No son del ICFES.</p>
         </button>
+        <button class="mode-card anim-in" style="--d:.43s; grid-column:1/-1;" data-action="go-config" data-mode="simulacro2">
+          <span class="mode-ico" aria-hidden="true">📝</span><h3>Simulacro 2026-2</h3>
+          <p class="muted">Practica el simulacro interno 2026-2 con cronómetro por pregunta.</p>
+        </button>
       </div>
-      <button class="btn btn-secondary btn-block" data-action="go-progress" style="margin-top:16px;">Ver progreso</button>
+      <button class="btn btn-secondary btn-block anim-in" data-action="go-progress" style="margin-top:16px; --d:.43s;">Ver mi progreso 📊</button>
       <p class="muted" style="margin-top:12px;">
         ${sessionsCount} sesión${sessionsCount === 1 ? "" : "es"} guardada${sessionsCount === 1 ? "" : "s"} en este navegador.
       </p>
@@ -220,61 +600,116 @@ window.SESP.ui = (function () {
 
   function startModeConfig(modeId) {
     let config = {};
-    if (modeId === "practice") config = { moduleId: "RC", competencia: "" };
-    else if (modeId === "simulation") config = { moduleId: "RC" };
+    if (modeId === "practice") config = { moduleId: "", competencia: "" };
+    else if (modeId === "simulation") config = { moduleId: "" };
     else if (modeId === "review") config = { moduleFilter: "" };
     else if (modeId === "express") config = { durationMinutes: 15, modules: ["RC", "LC", "CC", "IN"], sources: ["oficial"] };
     else if (modeId === "training") config = { moduleId: "Todas", competencia: "" };
+    else if (modeId === "simulacro2") config = { areaFilter: "Todas" };
     state = { screen: "modeConfig", modeId, config };
     render();
   }
 
+  function configStepHeader(subtitle) {
+    return `
+      <div class="config-steps" aria-label="Progreso de configuración">
+        <span class="config-dot done">1</span><span class="config-line"></span>
+        <span class="config-dot now">2</span><span class="config-line"></span>
+        <span class="config-dot">3</span>
+      </div>
+      <p class="muted config-sub">${subtitle}</p>
+    `;
+  }
+
   function renderModeConfig() {
-    const titleMap = { practice: "Práctica libre", simulation: "Simulacro", review: "Repaso", express: "Modo Exprés", training: "Entrenamiento" };
+    const titleMap = { practice: "Práctica libre", simulation: "Simulacro", review: "Repaso", express: "Modo Exprés", training: "Entrenamiento", simulacro2: "Simulacro 2026-2" };
+    const subMap = {
+      practice: "Paso 2 de 3 · Elige qué quieres reforzar hoy.",
+      simulation: "Paso 2 de 3 · Elige el módulo a simular al ritmo real del examen.",
+      review: "Paso 2 de 3 · Elige qué errores quieres repasar.",
+      express: "Paso 2 de 3 · Arma tu sesión corta a la medida.",
+      training: "Paso 2 de 3 · Elige el banco de entrenamiento.",
+      simulacro2: "Paso 2 de 3 · Elige el área del simulacro interno."
+    };
     let body = "";
     if (state.modeId === "practice") body = renderPracticeConfig();
     else if (state.modeId === "simulation") body = renderSimulationConfig();
     else if (state.modeId === "review") body = renderReviewConfig();
     else if (state.modeId === "express") body = renderExpressConfig();
     else if (state.modeId === "training") body = renderTrainingConfig();
+    else if (state.modeId === "simulacro2") body = renderSimulacro2Config();
     return `
       <button class="link-btn" data-action="go-home">&larr; Volver</button>
       <h2>${titleMap[state.modeId]}</h2>
+      ${configStepHeader(subMap[state.modeId] || "")}
       ${body}
     `;
   }
 
-  function moduleSelectOptions(selectedId) {
-    return modules.map((m) => `<option value="${m.id}" ${m.id === selectedId ? "selected" : ""}>${m.name}</option>`).join("");
+  function moduleSelectOptions(selectedId, placeholder) {
+    const ph = `<option value="">${placeholder || "— Por favor selecciona un módulo —"}</option>`;
+    return ph + modules.map((m) => `<option value="${m.id}" ${m.id === selectedId ? "selected" : ""}>${m.name}</option>`).join("");
+  }
+
+  function modulePoolCount(moduleId) {
+    if (!moduleId) return 0;
+    return (window.SESP.data.questions[moduleId] || []).length;
   }
 
   function renderPracticeConfig() {
     const meta = moduleMeta(state.config.moduleId);
     let extra;
-    if (meta.kind === "essay") {
-      extra = `<p class="muted">Ensayo argumentativo con el esquema real: 10 min de planeación + 30 min de escritura.</p>`;
+    let ctaDisabled = "";
+    if (!meta) {
+      extra = `<p class="guide-hint">👆 Primero selecciona un módulo: te mostraré sus competencias y cuántas preguntas te esperan.</p>`;
+      ctaDisabled = "disabled";
+    } else if (meta.kind === "essay") {
+      extra = `<p class="muted">Ensayo argumentativo con el esquema real: 10 min de planeación + 30 min de escritura.</p>
+        <p class="guide-ok">Buena elección: <strong>${meta.name}</strong>. Solo escribe, sin límite de preguntas.</p>`;
     } else {
       const comps = modesApi.practice.listCompetencias(state.config.moduleId);
       const opts = [`<option value="">Todas las competencias</option>`]
         .concat(comps.map((c) => `<option value="${c}" ${c === state.config.competencia ? "selected" : ""}>${c}</option>`))
         .join("");
-      extra = `<div class="field"><label>Competencia (opcional)</label><select data-field="competencia">${opts}</select></div>`;
+      extra = `<div class="field"><label>Competencia (opcional)</label><select data-field="competencia">${opts}</select></div>
+        <p class="guide-ok">Buena elección: <strong>${meta.name}</strong> · ${modulePoolCount(meta.id)} preguntas · ritmo objetivo ${meta.targetSeconds} s por pregunta.</p>`;
     }
     return `
       <div class="card">
-        <div class="field"><label>Módulo</label><select data-field="moduleId">${moduleSelectOptions(state.config.moduleId)}</select></div>
+        <div class="field"><label>1 · Módulo</label><select data-field="moduleId">${moduleSelectOptions(state.config.moduleId)}</select></div>
         ${extra}
-        <button class="btn btn-block" data-action="start-session">Comenzar</button>
+        <button class="btn btn-block" data-action="start-session" ${ctaDisabled}>Comenzar la práctica →</button>
       </div>
     `;
   }
 
   function renderSimulationConfig() {
+    const meta = moduleMeta(state.config.moduleId);
+    const okHtml = meta
+      ? `<p class="guide-ok">Buena elección: <strong>${meta.name}</strong> · ${modulePoolCount(meta.id)} preguntas al ritmo objetivo, sin pausas.</p>`
+      : `<p class="guide-hint">👆 Selecciona un módulo para simularlo como en el examen real.</p>`;
     return `
       <div class="card">
-        <div class="field"><label>Módulo</label><select data-field="moduleId">${moduleSelectOptions(state.config.moduleId)}</select></div>
+        <div class="field"><label>1 · Módulo a simular</label><select data-field="moduleId">${moduleSelectOptions(state.config.moduleId)}</select></div>
         <p class="muted">Se corren todas las preguntas de ese módulo al ritmo objetivo, sin pausas ni volver atrás.</p>
-        <button class="btn btn-block" data-action="start-session">Comenzar simulacro</button>
+        ${okHtml}
+        <button class="btn btn-block" data-action="start-session" ${meta ? "" : "disabled"}>Comenzar simulacro →</button>
+      </div>
+    `;
+  }
+
+  function renderSimulacro2Config() {
+    const areas = modesApi.simulacro2.listAreas();
+    const labels = { Todas: "Todas (mezcla RC, LC, CC, IN)", RC: "Razonamiento Cuantitativo (4-13)", LC: "Lectura Crítica (14-28)", CC: "Competencias Ciudadanas (39-47)", IN: "Inglés (29-38)", CE: "Comunicación Escrita (48, ensayo)" };
+    const options = areas.map((a) => {
+      const n = a === "CE" ? 1 : modesApi.simulacro2.countByArea(a);
+      return `<option value="${a}" ${a === state.config.areaFilter ? "selected" : ""}>${labels[a]} — ${n}</option>`;
+    }).join("");
+    return `
+      <div class="card">
+        <div class="field"><label>1 · Área del simulacro</label><select data-field="areaFilter">${options}</select></div>
+        <p class="muted">Preguntas 4 a 48 del Word del simulacro interno. Las claves se resolvieron desde el enunciado y están <strong>pendientes de verificación oficial</strong> con tu docente.</p>
+        <button class="btn btn-block" data-action="start-session">Comenzar</button>
       </div>
     `;
   }
@@ -291,8 +726,8 @@ window.SESP.ui = (function () {
     const dueNow = storage.getDueReviewQuestionIds(state.config.moduleFilter || null).length;
     return `
       <div class="card">
-        <div class="field"><label>Módulo</label><select data-field="moduleFilter">${options}</select></div>
-        <p class="muted">${dueNow} pregunta${dueNow === 1 ? "" : "s"} pendiente${dueNow === 1 ? "" : "s"} con este filtro.</p>
+        <div class="field"><label>1 · Módulo a repasar</label><select data-field="moduleFilter">${options}</select></div>
+        <p class="muted">${dueNow} pregunta${dueNow === 1 ? "" : "s"} pendiente${dueNow === 1 ? "" : "s"} con este filtro. Repasar errores vale doble.</p>
         <button class="btn btn-block" data-action="start-session" ${dueNow === 0 ? "disabled" : ""}>Comenzar repaso</button>
       </div>
     `;
@@ -380,8 +815,10 @@ window.SESP.ui = (function () {
     try {
       let session;
       if (state.modeId === "practice") {
+        if (!state.config.moduleId) { showMessage("Por favor selecciona un módulo para continuar. Si es tu primera vez, te recomendamos Razonamiento Cuantitativo."); return; }
         session = modesApi.practice.start({ moduleId: state.config.moduleId, competencia: state.config.competencia || undefined });
       } else if (state.modeId === "simulation") {
+        if (!state.config.moduleId) { showMessage("Por favor selecciona el módulo que quieres simular. Para calentar, elige uno corto como Inglés."); return; }
         session = modesApi.simulation.start({ moduleId: state.config.moduleId });
       } else if (state.modeId === "review") {
         session = modesApi.review.start({ moduleFilter: state.config.moduleFilter || null });
@@ -390,10 +827,13 @@ window.SESP.ui = (function () {
         session = modesApi.express.start({ durationMinutes: Number(state.config.durationMinutes), modules: state.config.modules, sources: state.config.sources });
       } else if (state.modeId === "training") {
         session = modesApi.training.start({ moduleId: state.config.moduleId, competencia: state.config.competencia || undefined });
+      } else if (state.modeId === "simulacro2") {
+        session = modesApi.simulacro2.start({ areaFilter: state.config.areaFilter });
       }
       state.session = session;
       state.answered = false;
       state.lastAnswer = null;
+      answerStreak = 0;
       state.screen = session.kind === "essay" ? "essay" : "question";
       render();
     } catch (err) {
@@ -456,7 +896,7 @@ window.SESP.ui = (function () {
         if (opt.key === q.correctOption) cls += " correct";
         else if (opt.key === state.lastAnswer.selectedOption) cls += " incorrect";
       }
-      return `<button class="${cls}" data-action="select-option" data-value="${opt.key}" ${disabled}>${escapeHtml(opt.key)}. ${escapeHtml(opt.text)}</button>`;
+      return `<button class="${cls}" data-action="select-option" data-value="${opt.key}" ${disabled}><span class="opt-key">${escapeHtml(opt.key)}</span><span>${escapeHtml(opt.text)}</span></button>`;
     }).join("");
 
     let feedbackHtml = "";
@@ -484,16 +924,25 @@ window.SESP.ui = (function () {
       ? `<span class="timer-chip fast" id="total-timer">${fmtCountdown(engine.getRemainingTotalMs(session))}</span>`
       : "";
 
+    const qTotal = session.questions ? session.questions.length : 0;
+    const qNum = Math.min(session.currentIndex + 1, qTotal);
+    const qPct = qTotal ? Math.round((session.currentIndex / qTotal) * 100) : 0;
     return `
       <div class="top-actions"><button class="link-btn" data-action="finish-session">Terminar sesión</button></div>
+      <div class="quest-progress" aria-label="Avance de la sesión">
+        <span>Pregunta ${qNum} de ${qTotal} · Paso 3 de 4</span>
+        <div class="quest-bar"><div class="quest-fill" style="width:${qPct}%"></div></div>
+      </div>
       <div class="timer-bar">
         <span class="pill" style="background:${meta.color}">${meta.name}</span>
         ${q.generated ? `<span class="pill pill-warn" title="Pregunta escrita para este proyecto, no tomada de un cuadernillo del ICFES">No oficial</span>` : ""}
-        <span class="timer-chip fast" id="question-timer">${fmtMs(engine.getElapsedForCurrentQuestionMs(session))}</span>
+        <span class="timer-chip fast" id="question-timer">⏳ --:--</span>
         ${totalTimerHtml}
       </div>
+      <div class="countdown-track" aria-hidden="true"><div class="countdown-fill fast" id="countdown-fill" style="width:100%"></div></div>
       ${context ? renderContext(context) : ""}
       <p class="prompt">${escapeHtml(q.prompt)}</p>
+      ${q.id && q.id.indexOf("S2-") === 0 ? `<p class="muted" style="font-size:.8em;">Simulacro 2026-2 · pregunta ${q.source && q.source.originalNumber != null ? q.source.originalNumber : ""} · clave derivada por el equipo, pendiente de verificación oficial.</p>` : ""}
       <div class="options">${optionsHtml}</div>
       ${feedbackHtml}
       ${nextButtonHtml}
@@ -505,6 +954,13 @@ window.SESP.ui = (function () {
     const answer = modesApi[state.modeId].submitAnswer(state.session, value);
     state.answered = true;
     state.lastAnswer = answer;
+    if (answer.correct == null) answerStreak = 0;
+    else if (answer.correct) {
+      answerStreak += 1;
+      render();
+      showStreakToast(answerStreak);
+      return;
+    } else answerStreak = 0;
     render();
   }
 
@@ -623,8 +1079,37 @@ window.SESP.ui = (function () {
 
     const c = summary.overall.classifications;
 
+    // Paso 4 de 4: celebra el avance y propone qué hacer después, como un guía.
+    let nextStepHtml = "";
+    try {
+      const acc = summary && summary.overall ? summary.overall.accuracy : null;
+      const cheer = acc == null
+        ? "Sesión completada. La constancia es lo que más suma."
+        : acc >= 0.8 ? "¡Excelente nivel! Estás listo para subir la dificultad."
+        : acc >= 0.5 ? "Buen avance. Ahora convierte esos errores en puntos."
+        : "Cada error de hoy es un acierto del examen. Vamos a repasarlos.";
+      let due = 0;
+      try { due = storage.getDueReviewQuestionIds(null).length; } catch (err) { due = 0; }
+      const cta = due > 0
+        ? `<button class="btn btn-block" data-action="go-config" data-mode="review">Repasar mis ${due} pendientes →</button>`
+        : `<button class="btn btn-block" data-action="go-config" data-mode="express">Probar el Modo Exprés →</button>`;
+      nextStepHtml = `
+        <div class="card next-step">
+          <h3>Paso 4 de 4 · ¿Qué sigue?</h3>
+          <p class="muted">${cheer}</p>
+          ${cta}
+          <button class="btn btn-secondary btn-block" data-action="go-progress" style="margin-top:8px;">Ver mi progreso</button>
+        </div>
+      `;
+    } catch (err) { nextStepHtml = ""; }
+
+    const s2Notice = session && session.mode === "simulacro2"
+      ? `<div class="card" style="border-color:var(--warn);"><p style="margin:0;"><strong>Simulacro 2026-2:</strong> <span class="muted">las claves de estas preguntas se resolvieron desde el enunciado y están pendientes de verificación oficial con tu docente. Prioriza los tiempos y los tips.</span></p></div>`
+      : "";
+
     return `
       <h2>Resultados</h2>
+      ${s2Notice}
       <div class="stat-grid">
         <div class="stat-box"><div class="value">${fmtPercent(summary.overall.accuracy)}</div><div class="label">Precisión global</div></div>
         <div class="stat-box"><div class="value">${summary.total}</div><div class="label">Preguntas respondidas</div></div>
@@ -648,6 +1133,7 @@ window.SESP.ui = (function () {
         <h3>Tips</h3>
         ${tipsHtml}
       </div>
+      ${nextStepHtml}
       <button class="btn btn-block" data-action="go-home">Volver al inicio</button>
     `;
   }
@@ -685,6 +1171,10 @@ window.SESP.ui = (function () {
   // se borró el historial, se cambió de equipo, etc.).
   function renderDataManagementCard() {
     return `
+      <div class="card">
+        <h3>Apariencia y accesibilidad</h3>
+        <div class="row" style="margin-bottom:12px;">${controlsHtml()}</div>
+      </div>
       <div class="card">
         <h3>Tus datos</h3>
         <p class="muted">Todo vive solo en este navegador. Exporta de vez en cuando por si se borra el historial del navegador, cambias de equipo, o algo similar.</p>
@@ -746,15 +1236,17 @@ window.SESP.ui = (function () {
         }).join("")
       : `<p class="muted">Todavía no hay sesiones de opción múltiple para graficar.</p>`;
 
+    const modeLabels = { practice: "Práctica", simulation: "Simulacro", review: "Repaso", express: "Exprés", training: "Entrenamiento", simulacro2: "Simulacro 2026-2" };
     const rowsHtml = sessions.slice().reverse().map((s) => {
       const date = new Date(s.startedAt);
       const dateStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const modeLabel = modeLabels[s.mode] || s.mode;
       if (s.answers) {
         const summary = statsApi.summarizeSession(s);
         const areaLabel = s.areaFilter || s.moduleFilter || "Mezcla";
-        return `<tr><td>${dateStr}</td><td>${s.mode}</td><td>${escapeHtml(areaLabel)}</td><td>${fmtPercent(summary.overall.accuracy)}</td><td>${fmtMs(summary.overall.avgMs)}</td></tr>`;
+        return `<tr><td>${dateStr}</td><td>${modeLabel}</td><td>${escapeHtml(areaLabel)}</td><td>${fmtPercent(summary.overall.accuracy)}</td><td>${fmtMs(summary.overall.avgMs)}</td></tr>`;
       }
-      return `<tr><td>${dateStr}</td><td>${s.mode}</td><td>CE</td><td>—</td><td>${s.essay.wordCount} palabras</td></tr>`;
+      return `<tr><td>${dateStr}</td><td>${modeLabel}</td><td>CE</td><td>—</td><td>${s.essay.wordCount} palabras</td></tr>`;
     }).join("");
 
     return `
@@ -781,8 +1273,49 @@ window.SESP.ui = (function () {
     const actionEl = e.target.closest("[data-action]");
     if (!actionEl) return;
     const action = actionEl.dataset.action;
-    if (action === "go-config") startModeConfig(actionEl.dataset.mode);
-    else if (action === "go-home") { state = { screen: "home" }; render(); }
+    if (action === "login-guest") { loginAsGuest(); return; }
+    else if (action === "logout") { logout(); return; }
+    else if (action === "toggle-password") {
+      const input = document.getElementById("login-password");
+      if (!input) return;
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      actionEl.classList.toggle("showing", show);
+      actionEl.setAttribute("aria-pressed", String(show));
+      actionEl.setAttribute("aria-label", show ? "Ocultar contraseña" : "Mostrar contraseña");
+      input.focus();
+      return;
+    }
+    else if (action === "login-forgot") {
+      const box = document.getElementById("login-error-box");
+      if (box) { box.textContent = "Demo local: no hay servidor. Usa Explorar como invitado o ingresa con cualquier contraseña válida."; box.classList.add("show"); }
+      return;
+    }
+    else if (action === "toggle-theme") {
+      const p = getPrefs();
+      storage.savePrefs({ theme: p.theme === "light" ? "dark" : "light", fontScale: p.fontScale, highContrast: p.highContrast });
+      applyPrefs();
+      render();
+      return;
+    }
+    else if (action === "cycle-font") {
+      const p = getPrefs();
+      const next = p.fontScale >= 1.25 ? 1 : p.fontScale >= 1.125 ? 1.25 : 1.125;
+      storage.savePrefs({ theme: p.theme, fontScale: next, highContrast: p.highContrast });
+      applyPrefs();
+      render();
+      return;
+    }
+    else if (action === "toggle-contrast") {
+      const p = getPrefs();
+      storage.savePrefs({ theme: p.theme, fontScale: p.fontScale, highContrast: !p.highContrast });
+      applyPrefs();
+      render();
+      return;
+    }
+    else if (action === "reward-continue") { pendingReward = null; state = { screen: "home" }; render(); return; }
+    else if (action === "go-config") startModeConfig(actionEl.dataset.mode);
+    else if (action === "go-home") { state = { screen: storage.getCurrentUser() ? "home" : "login" }; render(); }
     else if (action === "go-progress") { state = { screen: "progress" }; render(); }
     else if (action === "start-session") startSession();
     else if (action === "select-option") chooseOption(actionEl.dataset.value);
@@ -873,13 +1406,36 @@ window.SESP.ui = (function () {
       engine.setEssayText(state.session, e.target.value);
       updateWordCountBadge();
     }
+    if (e.target.id === "login-username") clearLoginError(e.target, "login-uErr");
+    if (e.target.id === "login-password") {
+      clearLoginError(e.target, "login-pErr");
+      const warn = document.getElementById("capsWarn");
+      if (warn && e.getModifierState) {
+        try { warn.classList.toggle("show", e.getModifierState("CapsLock")); } catch (err) { /* noop */ }
+      }
+    }
+  }
+
+  function handleSubmit(e) {
+    if (e.target && e.target.id === "login-form") {
+      e.preventDefault();
+      doLogin();
+    }
   }
 
   function init() {
     root = document.getElementById("app");
+    applyPrefs();
     root.addEventListener("click", handleClick);
     root.addEventListener("change", handleChange);
     root.addEventListener("input", handleInput);
+    root.addEventListener("submit", handleSubmit);
+    // Si ya había sesión guardada, entrar directo; si no, pedir login.
+    try {
+      state = { screen: storage.getCurrentUser() ? "home" : "login" };
+    } catch (err) {
+      state = { screen: "login" };
+    }
     render();
   }
 

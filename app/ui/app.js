@@ -11,7 +11,9 @@ window.SESP.ui = (function () {
 
   let root = null;
   let tickHandle = null;
-  let state = { screen: "login" };
+  // El login es opcional: se entra directo a la práctica y la cuenta solo se pide
+// si alguien la quiere, para tener avatar, XP y racha guardados en el navegador.
+let state = { screen: "home" };
   let modalEl = null;
   let pendingConfirmCallback = null;
   let pendingAvatar = null;
@@ -171,7 +173,7 @@ window.SESP.ui = (function () {
 
   // ---------- ciclo de render ----------
 
-  let spotTimer = null;
+let spotTimer = null;
   let spotIndex = 0;
 
   function stopSpotlight() {
@@ -226,15 +228,30 @@ window.SESP.ui = (function () {
     }, 6000);
   }
 
+  // Volver arriba no en cada render(), sino solo cuando cambia la pantalla o la
+  // pregunta: render() también se dispara al responder (para pintar el feedback) y
+  // en ese caso saltaría al passage mientras se está leyendo la explicación.
+  let lastRenderKey = null;
+
+  function currentRenderKey() {
+    const s = state.session;
+    // La sesión de ensayo (CE) no tiene cola de preguntas: getCurrentQuestion
+    // explotaría con ella, así que aquí no se pregunta.
+    const q = s && s.questions ? engine.getCurrentQuestion(s) : null;
+    return `${state.screen}|${state.modeId}|${q ? q.id : "-"}`;
+  }
+
   function render() {
     stopTick();
     stopSpotlight();
     stopLoginTip();
     if (!root) return;
-    // Puerta de entrada: sin sesión no se muestra nada más.
-    if (state.screen !== "login") {
-      try { if (!storage.getCurrentUser()) state = { screen: "login" }; } catch (err) { state = { screen: "login" }; }
-    }
+const key = currentRenderKey();
+    const changed = key !== lastRenderKey;
+    lastRenderKey = key;
+    // El login es opcional: la práctica se abre directo, como antes. Quien quiera
+    // la cuenta (avatar, XP y racha) la pide desde el inicio, y entonces sí se
+    // guarda en el navegador.
     if (state.screen === "login") { root.innerHTML = renderLogin(); startLoginTip(); }
     else if (state.screen === "home") root.innerHTML = renderHome();
     else if (state.screen === "modeConfig") root.innerHTML = renderModeConfig();
@@ -245,6 +262,9 @@ window.SESP.ui = (function () {
     else if (state.screen === "timeUp") root.innerHTML = renderTimeUp();
     else if (state.screen === "progress") root.innerHTML = renderProgress();
     else root.innerHTML = renderHome();
+    // En el teléfono es obligatorio: se lee un pasaje largo con el pulgar y al
+    // pasar a la pregunta siguiente el texto nuevo saldría a media pantalla.
+    if (changed) window.scrollTo(0, 0);
   }
 
   function startTick() {
@@ -529,27 +549,36 @@ window.SESP.ui = (function () {
     const userLabel = user ? escapeHtml(user.user) : "invitado";
     const guestTag = user && user.guest ? ` <span class="muted">(invitado)</span>` : "";
     let homeGame = "";
+    // La barra de nivel solo si hay sesión: los puntos y la racha se dan al
+    // entrar, así que sin cuenta se quedaría siempre en cero y sería engañoso.
     try {
       const g = storage.getGame();
       const avatar = (user && user.avatar) || g.avatar || "🧪";
       pendingAvatar = avatar;
-      const level = storage.levelForXp(g.xp);
-      const pct = ((g.xp || 0) % 100);
-      homeGame = `
-      <div class="card game-hud home-hud">
-        <div class="avatar-badge">${escapeHtml(avatar)}</div>
-        <div class="game-info">
-          <div class="game-top"><span class="level-badge">Nivel ${level}</span><span class="streak">Constancia: ${g.streak || 0} días · ${g.xp || 0} puntos</span></div>
-          <div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
-        </div>
-      </div>`;
+      if (user) {
+        const level = storage.levelForXp(g.xp);
+        const pct = ((g.xp || 0) % 100);
+        homeGame = `
+        <div class="card game-hud home-hud">
+          <div class="avatar-badge">${escapeHtml(avatar)}</div>
+          <div class="game-info">
+            <div class="game-top"><span class="level-badge">Nivel ${level}</span><span class="streak">Constancia: ${g.streak || 0} días · ${g.xp || 0} puntos</span></div>
+            <div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
+          </div>
+        </div>`;
+      }
     } catch (err) { homeGame = ""; }
     return `
       <div class="top-actions home-bar" style="justify-content:space-between; align-items:center;">
-        <span class="muted">Hola, <strong style="color:var(--text);">${userLabel}</strong>${guestTag}</span>
-        <span class="home-tools">${controlsHtml()}<button class="link-btn" data-action="logout">Cerrar sesión</button></span>
+        ${user
+          ? `<span class="muted">Hola, <strong style="color:var(--text);">${userLabel}</strong>${guestTag}</span>`
+          : `<span class="muted">Practica sin cuenta.</span>`}
+        <span class="home-tools">${controlsHtml()}${user
+          ? `<button class="link-btn" data-action="logout">Cerrar sesión</button>`
+          : `<button class="link-btn" data-action="login">Iniciar sesión</button>`}</span>
       </div>
       ${homeGame}
+      ${user ? "" : `<p class="muted" style="margin:-8px 0 12px;">Crear una cuenta guarda aquí tu avatar, tus puntos y tu racha de días. No hace falta para practicar.</p>`}
       <div class="home-brand">
         <img src="assets/images/logo.png" alt="Logo SepsLab" onerror="this.style.display='none'">
         <div><h1 style="margin:0;">SepsLab — Práctica Saber Pro</h1></div>
@@ -855,7 +884,10 @@ window.SESP.ui = (function () {
     if (context.table) {
       const headerRow = context.table.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
       const bodyRows = context.table.rows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`).join("");
-      tableHtml = `<table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+      // La tabla va dentro de un contenedor con scroll propio: las de los cuadernillos
+      // tienen hasta 7 columnas y no caben en un teléfono. Sin esto, la página entera
+      // se desplaza de lado y se pierde el lugar del texto al leerla.
+      tableHtml = `<div class="table-scroll"><table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
     }
     let imageHtml = "";
     if (context.image) {
@@ -916,8 +948,8 @@ window.SESP.ui = (function () {
         feedbackHtml += `<div class="explanation"><h4>${heading}</h4><p>${escapeHtml(explanation)}</p></div>`;
       }
       nextButtonHtml = canContinue()
-        ? `<button class="btn" data-action="next-question">Siguiente</button>`
-        : `<button class="btn" data-action="finish-session">Ver resultados</button>`;
+        ? `<button class="btn btn-block" data-action="next-question">Siguiente</button>`
+        : `<button class="btn btn-block" data-action="finish-session">Ver resultados</button>`;
     }
 
     const totalTimerHtml = session.totalTimeLimitMs != null
@@ -962,6 +994,29 @@ window.SESP.ui = (function () {
       return;
     } else answerStreak = 0;
     render();
+    revealAnswer();
+  }
+
+  // En un teléfono, las opciones ocupan casi toda la pantalla: cuando se responde, el
+  // "Correcto/Incorrecto" y el botón de siguiente quedan por debajo del borde y lo
+  // único que cambia es el color de la opción, así que parece que la app no arrancó.
+  // Se trae el bloque a la vista sin mover nada cuando ya cabe. En escritorio no hace
+  // falta (todo se ve a la vez) y el salto distraería, así que se limita a móvil.
+  function revealAnswer() {
+    if (window.innerWidth > 720) return;
+    const feedback = document.querySelector(".feedback");
+    if (!feedback) return;
+    // "Terminar sesión" de la barra superior también es data-action="finish-session":
+    // el botón de avanzar es el último de los dos.
+    const candidatos = document.querySelectorAll('[data-action="next-question"],[data-action="finish-session"]');
+    const next = candidatos[candidatos.length - 1] || null;
+    const arriba = feedback.getBoundingClientRect().top;
+    const abajo = (next || feedback).getBoundingClientRect().bottom;
+    const alto = window.innerHeight;
+    if (arriba >= 0 && abajo <= alto) return;
+    const bloque = abajo - arriba;
+    if (bloque + 40 < alto) window.scrollBy({ top: arriba - (alto - bloque) / 2, behavior: "smooth" });
+    else window.scrollBy({ top: arriba - 90, behavior: "smooth" }); // 90 px dejan libre el cronómetro fijo
   }
 
   function goNext() {
@@ -1005,8 +1060,8 @@ window.SESP.ui = (function () {
     const meta = moduleMeta("CE");
     const phaseLabel = session.phase === "planning" ? "Planeación" : "Escritura";
     const phaseActionHtml = session.phase === "planning"
-      ? `<button class="btn btn-secondary" data-action="essay-advance-phase">Pasar a escritura ahora</button>`
-      : `<button class="btn" data-action="essay-finish">Terminar</button>`;
+      ? `<button class="btn btn-secondary btn-block" data-action="essay-advance-phase">Pasar a escritura ahora</button>`
+      : `<button class="btn btn-block" data-action="essay-finish">Terminar</button>`;
 
     return `
       <div class="top-actions"><button class="link-btn" data-action="go-home">Salir</button></div>
@@ -1274,6 +1329,7 @@ window.SESP.ui = (function () {
     if (!actionEl) return;
     const action = actionEl.dataset.action;
     if (action === "login-guest") { loginAsGuest(); return; }
+    else if (action === "login") { state = { screen: "login" }; render(); return; }
     else if (action === "logout") { logout(); return; }
     else if (action === "toggle-password") {
       const input = document.getElementById("login-password");
@@ -1337,9 +1393,25 @@ window.SESP.ui = (function () {
   }
 
   // Genera el archivo de respaldo y dispara la descarga del navegador (sin servidor).
+  //
+  // Salvedad importante en el móvil: dentro del WebView de la app instalada (o de
+  // una PWA en Android) una descarga de un blob no hace nada visible, porque no hay
+  // interfaz de descargas del navegador. Antes que fallar en silencio, ahí se muestra
+  // el JSON en un cuadro de texto para copiarlo (a un correo, a Drive, a notas).
   function exportProgress() {
     const data = storage.exportData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const texto = JSON.stringify(data, null, 2);
+    const enWebViewNativo = !!(window.Capacitor && window.Capacitor.isNativePlatform
+      && window.Capacitor.isNativePlatform());
+    if (enWebViewNativo) {
+      showModal(`
+        <p class="muted">Copia este texto y guárdalo donde quieras (por ejemplo, en un correo o en Drive). Es el respaldo de tu progreso.</p>
+        <textarea readonly style="min-height:40vh;font-size:12px;">${escapeHtml(texto)}</textarea>
+        <button class="btn btn-block" data-modal-action="close">Entendido</button>
+      `);
+      return;
+    }
+    const blob = new Blob([texto], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

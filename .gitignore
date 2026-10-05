@@ -4,3 +4,10 @@ data-source/
 
 # Artefactos sueltos sin uso
 pyo
+
+# Dependencias de Capacitor (herramienta de build para el APK)
+node_modules/
+
+# Salidas de build
+build/
+dist/

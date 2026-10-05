@@ -1,0 +1,22 @@
+{
+  "name": "SESP — Práctica Saber Pro",
+  "short_name": "SESP",
+  "description": "Aplicación de práctica para el examen Saber Pro (Colombia)",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1a73e8",
+  "icons": [
+    {
+      "src": "assets/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

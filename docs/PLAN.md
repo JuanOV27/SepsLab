@@ -322,3 +322,121 @@ Auditoría de maquetación con navegador real a 320, 360 y 414 px: cero scroll h
 Sobre el teléfono de verdad (TECNO KJ5, Android 13, 720×1612 px): APK compilado e instalado, y probados con el dedo el arranque, el menú de Exprés, el avance entre preguntas, el cronómetro que queda fijo al desplazar, las imágenes de los cuadernillos, los desplegables con su flecha y el desplazamiento lateral de una tabla (la primera columna se queda fija mientras se arrastra). El ajuste del feedback descrito arriba se confirmó en el dispositivo, no solo en el emulador.
 
 `npm run auditar` (la verificación de datos de la ronda 5) sigue pasando sin fallos: los cambios de esta ronda son de presentación y no tocaron ni una clave ni un enunciado.
+
+---
+
+## Ronda 7 — Integrar el trabajo del colaborador
+
+### Por qué una rama aparte y no un "fast forward"
+
+La rama `feature/simulacro-2026-2` de un colaborador sale de `63bd380`, que es la
+punta exacta de `main`, y llega en **un solo commit**. Fusionarla sobre `main`
+sería técnicamente un `fast-forward` sin conflictos, y eso es justo el problema:
+`main` es el estado con la auditoría pasando, y sería sustituido de golpe, sin
+revisión. Pero el trabajo móvil (`phone-version`) también sale de `63bd380`, así
+que la decisión real era de tres.
+
+Se integró en `integracion-2026-2`: las dos ramas encima de `main`, y sobre eso
+los arreglos. El cruce fue de **4 bloques de conflicto en 3 archivos**:
+
+| Archivo | Conflicto | Cómo se resolvió |
+|---|---|---|
+| `index.html` | `viewport-fit` + manifest frente a fuente e icono | Se conservan ambos |
+| `ui/app.js` | Su carrusel frente a mi clave de render | Se conservan ambos |
+| `ui/styles.css` | Su bloque de login frente a mi bloque móvil | Son consecutivos: van seguidos |
+
+En `styles.css` su lado terminó sin cerrar el `@media (min-width: 1024px)`: el
+corte de git dejó el corchete fuera. Antes de dar por buena la resolución se
+contaron las llaves (483 abren, 483 cierran) y se comparó con el final original de
+cada rama.
+
+### Lo que sí estaba bien y se quedó
+
+Su CSS es **96 % aditivo** (1935 líneas nuevas, 38 eliminadas): no tiró la base,
+la amplió. La accesibilidad es trabajo de verdad: 8 bloques
+`prefers-reduced-motion`, modo claro, alto contraste, tamaño de texto y unos 30
+atributos ARIA, con `aria-invalid` en los campos del login y `role="alert"` en el
+resumen de errores. Y una honestidad que conviene decir en voz alta: sus 44
+claves están marcadas `keyStatus: "derived"` y la app le dice al estudiante, en la
+pantalla de cada pregunta, que la clave está *pendiente de verificación oficial*.
+
+El "recorrido guiado en 4 pasos con módulo obligatorio" del mensaje de commit
+asusta más de lo que es: no es un modal que haya que completar, son cuatro
+pastillas decorativas (1 Elige un modo, 2 Configura, 3 Responde, 4 Revisa). No
+hay ninguna puerta que cruzar.
+
+### Los cuatro arreglos
+
+**1. El login deja de ser puerta.** Antes, sin sesión en el navegador, `render()`
+mandaba a la pantalla de ingreso. Como la sesión es local, eso ponía un
+obstáculo delante de cada estudiante para nada: el propio código admite
+`cualquier credencial válida entra. Sin servidor`. Ahora se abre directo a la
+práctica y la cuenta se pide desde el inicio, con un enlace. Al destaparlo
+aparecieron **dos puertas más** que se habían pasado: volver al inicio y el
+cierre de la sesión de ensayo elegían entre `home` y `login` según hubiera
+cuenta. Y la barra de nivel solo se pinta con sesión, porque los puntos se dan al
+entrar y sin cuenta se quedaría en cero para siempre.
+
+**2. Los 130 px de desborde lateral.** Los adornos de fondo del login (los orbes
+difuminados) miden 380 px y se cuelgan por fuera del borde, pensados para
+pantalla ancha; en un teléfono de 360 empujaban la página 130 px de lado y se veía
+el borde de un círculo de luz. Se probaron cinco arreglo y el resultado fue el
+contrario de lo que se suponía:
+
+| Arreglo | Desborde |
+|---|---|
+| nada | 130 px |
+| `html { overflow-x: clip }` | 130 px |
+| `html { overflow-x: hidden }` | 130 px |
+| `body { overflow-x: clip }` | **0 px** |
+| `#app { overflow-x: clip }` | **0 px** |
+
+Ni `html` ni `body` alcanzan a los adornos. Se quedó `#app`, y con `clip` y no
+`hidden` porque `hidden` convierte el elemento en contenedor de desplazamiento y
+el cronómetro pegado arriba dejaría de pegarse. Comprobado: sigue en
+`position: sticky` y con `top: 0` tras bajar 500 px.
+
+**3. La fuente, sin red.** El diseño carga Nunito desde Google Fonts, y `main`
+no tenía ninguna dependencia externa. Se autoaloja en `app/assets/fonts/`: solo
+los subconjuntos latin y latin-ext, que es lo que necesita el español (325 KB), con
+la licencia OFL al lado. Así se conserva el diseño y la app arranca sin conexión,
+que es justo cuando más se usa.
+
+**4. La auditoría mira el banco nuevo.** Este era el hueco más serio: `tools/auditar.js`
+no sabía qué era `s2`, así que sus 45 preguntas **no pasaban por ninguna
+comprobación** y el total se quedaba en 303. Ahora hay un bloque 3 que, como el
+documento del que salieron no trae clave oficial, no comprueba si las claves son
+"correctas" sino lo que sí es comprobable: que estén marcadas como provisionales,
+que no se repitan de más y que la app avise al estudiante. El total sube a 348.
+
+También se calló un aviso falso: `logo.png` salía como "imagen que ningún contexto
+referencia" cuando sí se usa, porque se pinta desde el código. Ahora se buscan
+también las referencias en `ui/app.js`, `index.html` y `styles.css`.
+
+### Lo que queda pendiente, a propósito
+
+- **Las 44 preguntas de S2 no tienen explicación.** Es lo único que la app enseña
+  con detalle, y es justo lo que falta. Sale como aviso, no como fallo, y
+  deliberadamente: sus claves las resolvió el equipo y el docente todavía no las
+  verifica, así que escribir la explicación ahora daría por buena una clave que
+  puede cambiar. Se escriben después de la revisión.
+- **Las claves están concentradas**: C:18, B:17, A:4, D:5, cuando lo repartido
+  serían 11 y 11. Puede ser que el simulacro fuera así de verdad, pero conviene
+  mirarlo cuando el docente revise.
+- **El APK sigue siendo de depuración**, sin firmar, así que Android lo marca como
+  app no verificada. Publicarlo en Play Store exige una clave propia.
+
+### Verificación
+
+`npm run auditar` pasa. En navegador, a 320/360/414/768/1280 px: cero scroll
+horizontal, cero errores JS, el cronómetro sigue pegado al desplazar, la tabla del
+escritorio entra sin scroll (734 px en un contenedor de 800) y el módulo nuevo
+responde con su cuenta regresiva.
+
+Sobre el teléfono de verdad (TECNO KJ5, Android 13): APK de 6,6 MB compilado,
+instalado y tocado. Se comprobó con el dedo que arrastrar la pantalla hacia los
+lados **no mueve la página** (que era el fallo), que se entra directo a la práctica
+sin cuenta, que "Simulacro 2026-2" arranca, que la cuenta regresiva por pregunta
+corre, que el rótulo de clave provisional aparece bajo el enunciado y que al
+responder el veredicto y el botón Siguiente quedan a la vista.
+

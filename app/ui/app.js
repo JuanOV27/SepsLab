@@ -572,7 +572,7 @@ const key = currentRenderKey();
       <div class="top-actions home-bar" style="justify-content:space-between; align-items:center;">
         ${user
           ? `<span class="muted">Hola, <strong style="color:var(--text);">${userLabel}</strong>${guestTag}</span>`
-          : `<span class="muted">Practica sin cuenta.</span>`}
+          : `<span class="muted">Puedes practicar sin cuenta.</span>`}
         <span class="home-tools">${controlsHtml()}${user
           ? `<button class="link-btn" data-action="logout">Cerrar sesión</button>`
           : `<button class="link-btn" data-action="login">Iniciar sesión</button>`}</span>

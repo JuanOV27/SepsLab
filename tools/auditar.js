@@ -169,8 +169,23 @@ for (const { q } of todas) {
   if (!q.contextId && duenas.length) problemas.push(`${q.id}: sin contextId pero figura en ${duenas.join(", ")}`);
 }
 
+// Hay imágenes que se pintan desde el código y no desde un contexto de pregunta: el
+// logo de la pantalla de inicio y del login. Sin esto, logo.png salía como "imagen en
+// disco que ningún contexto referencia", que es un aviso falso. Ojo: esto tiene que
+// ir ANTES del bucle de abajo, que es el que comprueba que cada imagen exista.
+for (const archivo of ["ui/app.js", "index.html", "ui/styles.css"]) {
+  const ruta = path.join(APP, archivo);
+  if (!fs.existsSync(ruta)) continue;
+  const codigo = fs.readFileSync(ruta, "utf8");
+  for (const m of codigo.matchAll(/(?:assets\/images\/|\.\.\/images\/|images\/)([\w.-]+\.png)/g)) {
+    imagenes.push("assets/images/" + m[1]);
+  }
+}
+
 // Imágenes referenciadas vs. imágenes en disco.
-for (const src of imagenes) {
+// Se recorre el conjunto sin repetir: el mismo logo puede estar citado en app.js y
+// en index.html, y reportarlo dos veces hace ruido.
+for (const src of new Set(imagenes)) {
   const p = path.join(APP, src);
   if (!fs.existsSync(p)) problemas.push(`imagen inexistente: ${src}`);
   else if (fs.statSync(p).size < 1000) problemas.push(`imagen sospechosamente pequeña: ${src}`);
@@ -184,7 +199,10 @@ if (fs.existsSync(manifest)) {
   const m = JSON.parse(fs.readFileSync(manifest, "utf8"));
   (m.icons || []).forEach((ic) => imagenes.push(ic.src));
 }
-const sinReferenciar = enDisco.filter((f) => !imagenes.some((src) => src.endsWith(f)));
+// Una misma imagen puede estar referenciada desde varios sitios (un contexto y el
+// manifest, o el logo desde el código y desde el HTML): se cuenta una sola vez.
+const imagenesUnicas = [...new Set(imagenes)];
+const sinReferenciar = enDisco.filter((f) => !imagenesUnicas.some((src) => src.endsWith(f)));
 sinReferenciar.forEach((f) => avisos.push(`imagen en disco que ningún contexto referencia: ${f}`));
 
 // Explicaciones: cobertura de las preguntas de opción múltiple, sin huérfanas.
@@ -211,7 +229,7 @@ for (const id of Object.keys(explicaciones)) {
 const oficiales = todas.filter(({ q }) => !q.generated).length;
 const generadas = todas.length - oficiales;
 console.log(`   ${oficiales} preguntas oficiales + ${generadas} del banco propio = ${todas.length}`);
-console.log(`   ${imagenes.length} imágenes referenciadas, ${enDisco.length} en disco`);
+console.log(`   ${imagenesUnicas.length} imágenes referenciadas, ${enDisco.length} en disco`);
 
 // --------------------------------------------------------------------------------------
 // 3. El banco del Simulacro 2026-2.

@@ -781,6 +781,7 @@ const key = currentRenderKey();
     const sourceHtml = [
       { id: "oficial", label: "Cuadernillos oficiales del ICFES" },
       { id: "generado", label: "Banco de entrenamiento (no oficial)" },
+      { id: "simulacro2", label: "Simulacro 2026-2 (interno, no oficial)" },
     ].map((s) => `
       <label class="check-item">
         <input type="checkbox" data-field="sources" data-value="${s.id}" ${sources.indexOf(s.id) !== -1 ? "checked" : ""}>
@@ -790,11 +791,30 @@ const key = currentRenderKey();
 
     const isEssay = selected.length === 1 && selected[0] === "CE";
     const available = isEssay ? null : modesApi.express.countFor(selected, sources);
+    const usaSimulacro = sources.indexOf("simulacro2") !== -1;
+    // Áreas que el simulacro 2026-2 no cubre, de entre las marcadas. Sin esto se
+    // puede marcar Exprés con fuente "Simulacro 2026-2" y las siete áreas, y las
+    // preguntas de FP/DS/PC nunca van a aparecer.
+    const areasSinSimulacro = selected.filter((id) =>
+      id !== "CE" && modesApi.express.simulacro2Areas().indexOf(id) === -1);
+
     let hint;
     if (!selected.length) hint = "Marca al menos un área.";
     else if (!sources.length) hint = "Marca al menos una fuente.";
     else if (isEssay) hint = "Sesión de ensayo: Comunicación Escrita no se mezcla con otras áreas.";
+    else if (available === 0) hint = "Con esa combinación no queda ninguna pregunta. Prueba con otra fuente.";
     else hint = `${available} pregunta${available === 1 ? "" : "s"} disponible${available === 1 ? "" : "s"} con esta selección. Si se agotan antes de que acabe el tiempo, se rebarajan.`;
+
+    let aviso = "";
+    if (usaSimulacro) {
+      const pending = isEssay
+        ? "El tema de ensayo del simulacro también está pendiente de verificación."
+        : "Las claves del simulacro 2026-2 las resolvió el equipo y <strong>siguen pendientes de verificación con el docente</strong>: la app te lo recuerda bajo cada enunciado.";
+      const extra = areasSinSimulacro.length
+        ? ` El simulacro 2026-2 no tiene preguntas de ${areasSinSimulacro.join(", ")}, así que esas áreas no aportan nada con esa fuente.`
+        : "";
+      aviso = `<p class="muted">${pending}${extra}</p>`;
+    }
 
     return `
       <div class="card">
@@ -802,6 +822,7 @@ const key = currentRenderKey();
         <div class="field"><label>Áreas</label><div class="check-grid">${areaHtml}</div></div>
         <div class="field"><label>Fuente de las preguntas</label><div class="check-grid">${sourceHtml}</div></div>
         <p class="muted">${escapeHtml(hint)}</p>
+        ${aviso}
         <button class="btn btn-block" data-action="start-session" ${!selected.length || !sources.length || available === 0 ? "disabled" : ""}>Comenzar</button>
       </div>
     `;

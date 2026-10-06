@@ -439,4 +439,35 @@ lados **no mueve la página** (que era el fallo), que se entra directo a la prá
 sin cuenta, que "Simulacro 2026-2" arranca, que la cuenta regresiva por pregunta
 corre, que el rótulo de clave provisional aparece bajo el enunciado y que al
 responder el veredicto y el botón Siguiente quedan a la vista.
+### Exprés también puede usar el banco del simulacro 2026-2
+
+No hizo falta tocar la estructura de Exprés, porque ya tenía dónde encajar: su
+segundo eje, `sources`, es exactamente "de dónde salen las preguntas". Así que el
+simulacro entró como **tercer origen**, junto a "oficial" y "generado", y no como
+un modo aparte ni como una bandera nueva.
+
+Con eso, en Exprés se puede marcar la fuente del simulacro sola (las 44
+preguntas de opción múltiple), combinada con la oficial (144 preguntas mezclando
+cuadernillos y simulacro) o con la de entrenamiento.
+
+Dos cosas que salieron al hacerlo y que no eran obvias:
+
+- **El tema de ensayo del simulacro se colaba como oficial.** `S2-CE-01` está
+  guardado dentro del banco `questions.CE`, y el código de Exprés tomaba ese banco
+  entero cuando la fuente era "oficial". O sea que un alumno podía caer en el tema
+  del simulacro sin haber marcado su fuente, y la app lo habría presentado como
+  un tema de 2018. Ahora se separa por prefijo y solo entra si la fuente del
+  simulacro está marcada. Comprobado: con 40 sesiones de ensayo solo "oficial" no
+  salió ninguna del simulacro; con "simulacro2" sale `S2-CE-01`.
+- **El simulacro solo tiene RC, LC, CC e IN.** Se puede marcar Exprés con las siete
+  áreas y la fuente del simulacro, pero FP/DS/PC no aportarían nada. La pantalla de
+  configuración lo dice antes de empezar en vez de dejar que se descubra jugando,
+  y si la combinación se queda sin preguntas el botón "Comenzar" queda deshabilitado
+  en vez de fallar al arrancar.
+
+El rótulo de "clave derivada por el equipo, pendiente de verificación oficial" que
+ya ponía el módulo Simulacro 2026-2 en cada pregunta se aplicaba por id (`S2-`), así
+que también sale en Exprés sin cambiar nada. En la pantalla de configuración se
+añade además el recordatorio, porque ahí es donde se decide si se quiere practicar
+con material sin verificar.
 

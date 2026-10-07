@@ -18,6 +18,10 @@
      huérfano cuando el primario pasa a ser morado en modo claro. */
   --ring: rgba(25, 133, 161, 0.32);
   --tint: rgba(25, 133, 161, 0.12);
+  /* Texto legible sobre rellenos de color. Cambian en modo claro: alli el bronce
+     es oscuro y el texto blanco se lee mejor que la tinta oscura. */
+  --on-accent: #ffffff;
+  --on-warn: #1a1030;
 }
 
 * {
@@ -94,7 +98,7 @@ button, select, textarea, input {
   display: inline-block;
   appearance: none;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   border: none;
   border-radius: var(--radius);
   padding: 10px 18px;
@@ -1124,7 +1128,7 @@ input[aria-invalid="true"] {
 .level-badge {
   font-size: .75em; font-weight: 800; letter-spacing: .04em;
   background: linear-gradient(90deg, var(--warn), #F6CF7D);
-  color: #1a1030; border-radius: 999px; padding: 2px 10px;
+  color: var(--on-warn); border-radius: 999px; padding: 2px 10px;
 }
 .streak { font-size: .85em; font-weight: 700; color: var(--text); }
 .xp-bar { height: 10px; background: rgba(255,255,255,.12); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
@@ -1645,7 +1649,7 @@ input[aria-invalid="true"] {
 .count-pill {
   display: inline-grid; place-items: center;
   min-width: 24px; height: 24px; border-radius: 999px;
-  background: var(--warn); color: #1a1030;
+  background: var(--warn); color: var(--on-warn);
   font-size: 0.75em; vertical-align: middle;
   animation: count-pulse 2s ease-in-out infinite;
 }
@@ -1763,7 +1767,7 @@ input[aria-invalid="true"] {
 .guide-step.is-now b {
   background: var(--warn);
   border-color: var(--warn);
-  color: #1a1030;
+  color: var(--on-warn);
   animation: count-pulse 2s ease-in-out infinite;
 }
 
@@ -1800,7 +1804,7 @@ input[aria-invalid="true"] {
 .config-dot.now {
   background: var(--warn);
   border-color: var(--warn);
-  color: #1a1030;
+  color: var(--on-warn);
 }
 
 .config-line {
@@ -2241,6 +2245,17 @@ html[data-theme="light"] {
   --warn: #9A6206;
   --ring: rgba(126, 44, 196, 0.28);
   --tint: rgba(126, 44, 196, 0.1);
+  /* Texto sobre rellenos de color: en claro el bronce es oscuro, asi que el
+     blanco se lee mejor que el tinta que se usa en el tema oscuro. */
+  --on-warn: #ffffff;
+  --on-accent: #ffffff;
+  /* Botones: el primario baja de tono para ganar contraste sobre fondo claro. */
+  --btn-primary: linear-gradient(135deg, #7E2CC4 0%, #6A23A6 100%);
+  --btn-primary-hover: linear-gradient(135deg, #6A23A6 0%, #571C8C 100%);
+  --btn-secondary-bg: #FFFFFF;
+  --btn-secondary-border: #BFA8D8;
+  --btn-secondary-fg: #5B1E96;
+  --btn-ring: rgba(126, 44, 196, 0.22);
 }
 
 html[data-theme="light"] body {
@@ -2293,6 +2308,95 @@ html[data-theme="light"] input {
 
 html[data-theme="light"] .level-badge {
   color: #2C1436;
+}
+
+/* ---------- Modo claro: botones y chips de color ----------
+   El primario usaba un degradado cyan fijo que, con el morado de este tema,
+   quedaba apagado; y el secundario (lila sobre lila) se perdia contra el fondo. */
+html[data-theme="light"] .btn {
+  background: var(--btn-primary);
+  box-shadow: 0 2px 10px var(--btn-ring);
+  color: var(--on-accent);
+}
+
+html[data-theme="light"] .btn:hover {
+  background: var(--btn-primary-hover);
+  box-shadow: 0 4px 16px rgba(126, 44, 196, 0.3);
+}
+
+html[data-theme="light"] .btn::after {
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+}
+
+html[data-theme="light"] .btn:disabled {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  box-shadow: none;
+  opacity: 1;
+}
+
+html[data-theme="light"] .btn-secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-fg);
+  border-color: var(--btn-secondary-border);
+  box-shadow: 0 1px 3px rgba(76, 29, 102, 0.08);
+}
+
+html[data-theme="light"] .btn-secondary:hover {
+  background: #F6F1FC;
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
+html[data-theme="light"] .login-pro .btn-secondary {
+  background: transparent;
+  color: var(--btn-secondary-fg);
+  border-color: var(--accent);
+}
+
+html[data-theme="light"] .login-pro .btn-secondary:hover {
+  background: var(--tint);
+}
+
+/* Tarjetas de modo (tambien botones): borde mas presente al clarified el paso */
+html[data-theme="light"] .mode-card {
+  border-color: var(--btn-secondary-border);
+  background: var(--btn-secondary-bg);
+}
+
+html[data-theme="light"] .mode-card:hover {
+  border-color: var(--accent);
+  background: #F8F4FD;
+  box-shadow: 0 6px 18px rgba(126, 44, 196, 0.16);
+}
+
+/* Chips con relleno de bronce: el texto pasa a blanco para leerse. */
+html[data-theme="light"] .count-pill,
+html[data-theme="light"] .guide-step.is-now b,
+html[data-theme="light"] .config-dot.now {
+  color: var(--on-warn);
+}
+
+html[data-theme="light"] .level-badge {
+  background: linear-gradient(90deg, #C98A12, #E8B44A);
+  color: #2C1436;
+}
+
+/* Pildoras de modulo: texto blanco sobre el color del modulo. */
+html[data-theme="light"] .pill {
+  color: #ffffff;
+}
+
+html[data-theme="light"] .check-item,
+html[data-theme="light"] .mission-chip {
+  background: var(--btn-secondary-bg);
+  border-color: var(--btn-secondary-border);
+}
+
+html[data-theme="light"] .mission-chip.selected,
+html[data-theme="light"] .avatar-btn.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--btn-ring);
 }
 
 /* ---------- Alto contraste ---------- */

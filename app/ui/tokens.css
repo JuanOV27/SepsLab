@@ -53,6 +53,16 @@
 
   --on-accent: #ffffff;
   --on-warn: #1a1030;
+
+  /* Identidad de cada avatar. En el tema oscuro se usan tonos claros porque la
+     superficie es profunda; en el claro, tonos oscuros del mismo color para que
+     el icono no se lave contra el fondo blanco (ver el bloque de abajo). */
+  --av-lab: #22D3EE;
+  --av-rocket: #FB7185;
+  --av-brain: #C4B5FD;
+  --av-bolt: #FCD34D;
+  --av-target: #4ADE80;
+  --av-bot: #93C5FD;
 }
 
 /* ---------- Tema claro ---------- */
@@ -103,4 +113,14 @@ html[data-theme="light"] {
   --btn-secondary-border: #C3AFD8;
   --btn-secondary-fg: #5B1E96;
   --btn-ring: rgba(107, 33, 182, 0.22);
+
+  /* Avatar en modo claro: el mismo color, oscurecido. Con los tonos claros del
+     tema oscuro el icono quedaba casi invisible sobre el blanco. Todos estos
+     valores superan 4.5:1 contra --surface y --surface-2. */
+  --av-lab: #0A6279;
+  --av-rocket: #BE123C;
+  --av-brain: #6D28D9;
+  --av-bolt: #9C4A05;
+  --av-target: #12662F;
+  --av-bot: #1D4ED8;
 }

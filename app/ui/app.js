@@ -27,21 +27,22 @@ let state = { screen: "home" };
 
   // El avatar se guarda como emoji (clave estable en localStorage) pero se dibuja
   // con un SVG propio: los botones de la app usan SVG y los emoji se veían de otro
-  // tipo. Si un valor no está en el mapa, se cae al emoji como texto plano.
+  // tipo. Cada uno lleva un data-avatar para que el CSS le dé su color (--av-* en
+  // tokens.css); si el valor no está en el mapa, se cae al emoji como texto plano.
   const AVATARS = ["🧪", "🚀", "🧠", "⚡", "🎯", "👾"];
   const AVATAR_ICONS = {
-    "🧪": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v5l-5.5 8.6A2 2 0 0 0 6.2 19.5h11.6a2 2 0 0 0 1.7-2.9L14 8V3"/><path d="M7.2 14h9.6"/></svg>',
-    "🚀": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5c2.5-2.5 5.5-2.5 5.5-2.5s0 3-2.5 5.5l-3.5 1.2-1.2-1.2 1.2-3z"/><path d="M9 11.5 6 14.5 4.5 20l5.5-1.5 3-3"/><path d="M8.5 15.5 5 16"/><circle cx="16.8" cy="7.2" r="1.1"/></svg>',
-    "🧠": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a3 3 0 0 0-3 3 2.8 2.8 0 0 0-1.5 4.8A3 3 0 0 0 9 18a3 3 0 0 0 3 1.5z"/><path d="M12 4.5a3 3 0 0 1 3 3 2.8 2.8 0 0 1 1.5 4.8A3 3 0 0 1 15 18a3 3 0 0 1-3 1.5z"/><path d="M12 4.5v15"/></svg>',
-    "⚡": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>',
-    "🎯": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1"/></svg>',
-    "👾": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3.5"/><path d="M12 4.5V8M2.5 13v3M21.5 13v3"/><path d="M9 13.5v1.2M15 13.5v1.2"/><path d="M10 17.5h4"/></svg>',
+    "🧪": ["lab", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v5l-5.5 8.6A2 2 0 0 0 6.2 19.5h11.6a2 2 0 0 0 1.7-2.9L14 8V3"/><path d="M7.2 14h9.6"/></svg>'],
+    "🚀": ["rocket", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5c2.5-2.5 5.5-2.5 5.5-2.5s0 3-2.5 5.5l-3.5 1.2-1.2-1.2 1.2-3z"/><path d="M9 11.5 6 14.5 4.5 20l5.5-1.5 3-3"/><path d="M8.5 15.5 5 16"/><circle cx="16.8" cy="7.2" r="1.1"/></svg>'],
+    "🧠": ["brain", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a3 3 0 0 0-3 3 2.8 2.8 0 0 0-1.5 4.8A3 3 0 0 0 9 18a3 3 0 0 0 3 1.5z"/><path d="M12 4.5a3 3 0 0 1 3 3 2.8 2.8 0 0 1 1.5 4.8A3 3 0 0 1 15 18a3 3 0 0 1-3 1.5z"/><path d="M12 4.5v15"/></svg>'],
+    "⚡": ["bolt", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>'],
+    "🎯": ["target", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1"/></svg>'],
+    "👾": ["bot", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3.5"/><path d="M12 4.5V8M2.5 13v3M21.5 13v3"/><path d="M9 13.5v1.2M15 13.5v1.2"/><path d="M10 17.5h4"/></svg>'],
   };
 
   function avatarHtml(value) {
-    const key = value || "🧪";
-    const icon = AVATAR_ICONS[key];
-    return icon || escapeHtml(key);
+    const entry = AVATAR_ICONS[value || "🧪"];
+    if (!entry) return escapeHtml(value || "🧪");
+    return `<span class="avatar-glyph" data-avatar="${entry[0]}" aria-hidden="true">${entry[1]}</span>`;
   }
   const DAILY_TIPS = [
     "Lea la pregunta completa antes de revisar las opciones de respuesta.",

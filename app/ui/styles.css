@@ -3673,6 +3673,13 @@ html[data-contrast="high"] .opt-mark {
 }
 
 /* ---------- Avatares en SVG ---------- */
+.avatar-glyph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
 .avatar-badge svg,
 .resume-avatar svg,
 .reward-avatar svg,
@@ -3683,12 +3690,21 @@ html[data-contrast="high"] .opt-mark {
   display: block;
 }
 
-.avatar-btn {
-  color: var(--text);
-}
+/* Cada avatar con su color, en vez del color de texto: seis siluetas iguales
+   del mismo tono nosrvían para distinguirlas de un vistazo. */
+[data-avatar="lab"] { color: var(--av-lab); }
+[data-avatar="rocket"] { color: var(--av-rocket); }
+[data-avatar="brain"] { color: var(--av-brain); }
+[data-avatar="bolt"] { color: var(--av-bolt); }
+[data-avatar="target"] { color: var(--av-target); }
+[data-avatar="bot"] { color: var(--av-bot); }
 
-.avatar-btn.selected {
-  color: var(--warn);
+/* La insignia del nivel y la de recompensas van sobre el degradado del acento,
+   así que ahí el icono se queda en blanco: un tinte propio sobre cyan (modo
+   oscuro) o violeta (modo claro) competiría con el fondo. */
+.avatar-badge [data-avatar],
+.rewards-avatar [data-avatar] {
+  color: var(--on-accent);
 }
 
 /* ---------- Informe imprimible ---------- */

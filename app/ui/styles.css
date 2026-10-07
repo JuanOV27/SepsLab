@@ -459,11 +459,37 @@ th {
 }
 
 .progress-bar-mini {
+  position: relative;
   flex: 1;
   min-width: 6px;
   max-width: 24px;
   border-radius: 3px 3px 0 0;
   opacity: 0.9;
+}
+
+/* El número dentro de la barra. Antes solo aparecía al pasar el ratón por ella:
+   en una gráfica estática el dato no se veía en ninguna parte, y había que
+   suponer cuánto medía cada columna. */
+.progress-bar-mini span {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.62em;
+  font-weight: 800;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Con una sola sesión la barra quedaba angosta y sola en un hueco vacío: se
+   ensancha para que se lea como una serie y no como un error de dibujo. */
+.progress-chart[data-sessions="1"] {
+  gap: 0;
+}
+
+.progress-chart[data-sessions="1"] .progress-bar-mini {
+  max-width: 46px;
 }
 
 .tips {

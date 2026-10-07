@@ -1802,6 +1802,33 @@ let spotTimer = null;
     `;
   }
 
+  // Una sesión de ensayo (CE) se guarda con answers: [] porque no se califica por
+// opción. Un arreglo con longitud distintatruthy la metía en la columna de
+// precisión y salía como 0 preguntas y --:-- de tiempo.
+function esSesionEnsayo(s) {
+    return !!(s && (s.essay || (Array.isArray(s.answers) && s.answers.length === 0 && s.mode === "essay")));
+  }
+
+  // Modo y fecha se escriben siempre en español y en formato colombiano: si se
+  // deja el del navegador, un equipo en inglés muestra "10/6/2026" y "essay".
+  const MODE_LABELS = {
+    practice: "Práctica",
+    simulation: "Simulacro",
+    review: "Repaso",
+    express: "Exprés",
+    training: "Entrenamiento",
+    simulacro2: "Simulacro 2026-2",
+    essay: "Ensayo (CE)",
+  };
+
+  function fechaCorta(d) {
+    return d.toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function horaCorta(d) {
+    return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+  }
+
   // ---------- informe imprimible para el docente ----------
 
   function renderReport() {
@@ -1812,7 +1839,9 @@ let spotTimer = null;
 
     const answered = [];
     sessions.forEach((s) => {
-      if (!s.answers) return;
+      // Las sesiones de ensayo (CE) se excluyen: no tienen preguntas de opción
+      // múltiple, y contarlas como cero hundiría la media del informe.
+      if (esSesionEnsayo(s) || !Array.isArray(s.answers)) return;
       s.answers.forEach((a) => { if (a.correct != null) answered.push(a); });
     });
     const totalQ = answered.length;
@@ -1839,14 +1868,18 @@ let spotTimer = null;
 
     const rows = sessions.slice().reverse().map((s) => {
       const d = new Date(s.startedAt);
-      const date = d.toLocaleDateString("es-CO") + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      const modeLabel = { practice: "Práctica", simulation: "Simulacro", review: "Repaso", express: "Exprés", training: "Entrenamiento", simulacro2: "Simulacro 2026-2" }[s.mode] || s.mode;
+      const date = fechaCorta(d) + ", " + horaCorta(d);
+      const modeLabel = MODE_LABELS[s.mode] || s.mode;
       const area = s.areaFilter || s.moduleFilter || "Mezcla";
-      if (s.answers) {
+      if (esSesionEnsayo(s)) {
+        const palabras = s.essay && s.essay.wordCount != null ? s.essay.wordCount : null;
+        return `<tr><td>${date}</td><td>${escapeHtml(modeLabel)}</td><td>CE (ensayo)</td><td>—</td><td>—</td><td>${palabras != null ? escapeHtml(String(palabras)) + " palabras" : "—"}</td></tr>`;
+      }
+      if (Array.isArray(s.answers) && s.answers.length) {
         const sum = statsApi.summarizeSession(s);
         return `<tr><td>${date}</td><td>${escapeHtml(modeLabel)}</td><td>${escapeHtml(String(area))}</td><td>${sum.total}</td><td>${fmtPercent(sum.overall.accuracy)}</td><td>${fmtMs(sum.overall.avgMs)}</td></tr>`;
       }
-      return `<tr><td>${date}</td><td>${escapeHtml(modeLabel)}</td><td>CE (ensayo)</td><td>1</td><td>—</td><td>${s.essay.wordCount} palabras</td></tr>`;
+      return `<tr><td>${date}</td><td>${escapeHtml(modeLabel)}</td><td>${escapeHtml(String(area))}</td><td>0</td><td>—</td><td>—</td></tr>`;
     }).join("");
 
     return `
@@ -1922,7 +1955,7 @@ let spotTimer = null;
 
     const byModuleSeries = {};
     sessions.forEach((s) => {
-      if (!s.answers) return; // sesión de ensayo (CE), no tiene precisión
+      if (esSesionEnsayo(s) || !Array.isArray(s.answers) || !s.answers.length) return;
       const summary = statsApi.summarizeSession(s);
       Object.keys(summary.byModule).forEach((moduleId) => {
         if (summary.byModule[moduleId].accuracy == null) return;
@@ -1937,7 +1970,7 @@ let spotTimer = null;
           const series = byModuleSeries[moduleId];
           const bars = series.map((acc) => {
             const pct = Math.round(acc * 100);
-            return `<div class="progress-bar-mini" style="height:${Math.max(6, pct)}%; background:${meta.color};" title="${pct}%"></div>`;
+            return `<div class="progress-bar-mini" style="height:${Math.max(6, pct)}%; background:${meta.color};" title="${pct}%"><span>${pct}</span></div>`;
           }).join("");
           let trendTxt = "";
           if (series.length > 1) {
@@ -1950,23 +1983,26 @@ let spotTimer = null;
                 <strong>${meta.name}</strong>
                 <span class="muted">${series.length} sesión${series.length === 1 ? "" : "es"}${trendTxt ? " · " + trendTxt : ""}</span>
               </div>
-              <div class="progress-chart">${bars}</div>
+              <div class="progress-chart" data-sessions="${series.length}" title="Precisión por sesión, de la más antigua a la más reciente">${bars}</div>
             </div>
           `;
         }).join("")
       : `<p class="muted">Todavía no hay sesiones de opción múltiple para graficar.</p>`;
 
-    const modeLabels = { practice: "Práctica", simulation: "Simulacro", review: "Repaso", express: "Exprés", training: "Entrenamiento", simulacro2: "Simulacro 2026-2" };
     const rowsHtml = sessions.slice().reverse().map((s) => {
-      const date = new Date(s.startedAt);
-      const dateStr = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-      const modeLabel = modeLabels[s.mode] || s.mode;
-      if (s.answers) {
+      const d = new Date(s.startedAt);
+      const dateStr = `${fechaCorta(d)}, ${horaCorta(d)}`;
+      const modeLabel = MODE_LABELS[s.mode] || s.mode;
+      if (esSesionEnsayo(s)) {
+        const palabras = s.essay && s.essay.wordCount != null ? s.essay.wordCount : null;
+        return `<tr><td>${dateStr}</td><td>${escapeHtml(modeLabel)}</td><td>CE (ensayo)</td><td>—</td><td>${palabras != null ? escapeHtml(String(palabras)) + " palabras" : "—"}</td></tr>`;
+      }
+      if (Array.isArray(s.answers) && s.answers.length) {
         const summary = statsApi.summarizeSession(s);
         const areaLabel = s.areaFilter || s.moduleFilter || "Mezcla";
-        return `<tr><td>${dateStr}</td><td>${modeLabel}</td><td>${escapeHtml(areaLabel)}</td><td>${fmtPercent(summary.overall.accuracy)}</td><td>${fmtMs(summary.overall.avgMs)}</td></tr>`;
+        return `<tr><td>${dateStr}</td><td>${escapeHtml(modeLabel)}</td><td>${escapeHtml(areaLabel)}</td><td>${fmtPercent(summary.overall.accuracy)}</td><td>${fmtMs(summary.overall.avgMs)}</td></tr>`;
       }
-      return `<tr><td>${dateStr}</td><td>${modeLabel}</td><td>CE</td><td>—</td><td>${s.essay.wordCount} palabras</td></tr>`;
+      return `<tr><td>${dateStr}</td><td>${escapeHtml(modeLabel)}</td><td>—</td><td>—</td><td>Sin respuestas</td></tr>`;
     }).join("");
 
     return `

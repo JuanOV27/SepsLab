@@ -1,0 +1,106 @@
+/* =========================================================
+   tokens.css - el sistema de color de SepsLab
+   -------------------------------------------------------------
+   Aquí viven todas las variables de tema. styles.css solo usa var(--...).
+   Para cambiar la identidad visual de la app, se edita este archivo: no
+   hay ningún color suelto en los componentes.
+   ========================================================= */
+
+/* ---------- Tema oscuro (por defecto) ---------- */
+:root {
+  color-scheme: dark; /* evita que el navegador re-invierta colores pensando que la página es clara */
+  /* Sistema de color con roles separados: la acción (acento) y los estados de
+     respuesta (correcto / incorrecto / aviso) nunca comparten matiz, para que un
+     acierto no se confunda con un botón. */
+  --bg: #17101F;
+  --surface: #241733;
+  --surface-2: #2F2043;
+  --surface-hover: #3B2A52;
+  --border: #45335C;
+  --border-strong: #5A4478;
+  --text: #F4F1F7;
+  --text-dim: #B4A7C4;
+
+  --accent: #2BB3CE;        /* acción: botones, foco, enlaces */
+  --accent-hover: #46C2DA;
+  --accent-ink: #06222A;   /* texto sobre acento */
+
+  --good: #3FB98B;         /* respuesta correcta */
+  --good-ink: #06231A;
+  --bad: #F0655F;          /* respuesta incorrecta */
+  --bad-ink: #2A0B0A;
+  --warn: #E0A43A;         /* tiempo, racha, avisos */
+  --warn-ink: #2A1B04;
+  --warn-hi: #F0C878;      /* extremo claro del degradado de bronce */
+
+  --accent-soft: rgba(43, 179, 206, 0.14);
+  --good-soft: rgba(63, 185, 139, 0.16);
+  --bad-soft: rgba(240, 101, 95, 0.16);
+  --warn-soft: rgba(224, 164, 58, 0.14);
+
+  --radius: 10px;
+  --ring: rgba(43, 179, 206, 0.38);
+  --tint: rgba(43, 179, 206, 0.12);
+  --glow-accent: rgba(43, 179, 206, 0.45);
+  --glow-warn: rgba(224, 164, 58, 0.35);
+  --ring-warn: rgba(224, 164, 58, 0.35);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --shadow-soft: rgba(0, 0, 0, 0.35);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --bubble-accent: rgba(43, 179, 206, 0.5);
+  --bubble-warn: rgba(224, 164, 58, 0.45);
+  --bubble-soft: rgba(244, 241, 247, 0.28);
+
+  --on-accent: #ffffff;
+  --on-warn: #1a1030;
+}
+
+/* ---------- Tema claro ---------- */
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F4F1F9;
+  --surface: #FFFFFF;
+  --surface-2: #F1EBF8;
+  --surface-hover: #E7DEF3;
+  --border: #DCD0E9;
+  --border-strong: #C3AFD8;
+  --text: #241533;
+  --text-dim: #63507A;
+  --accent: #6B21B6;
+  --accent-hover: #5A1A9C;
+  --accent-ink: #FFFFFF;
+  --good: #157A57;
+  --good-ink: #FFFFFF;
+  --bad: #C0392B;
+  --bad-ink: #FFFFFF;
+  --warn: #8A5A06;
+  --warn-ink: #FFFFFF;
+  --warn-hi: #C08A1E;
+  --accent-soft: rgba(107, 33, 182, 0.1);
+  --good-soft: rgba(21, 122, 87, 0.12);
+  --bad-soft: rgba(192, 57, 43, 0.1);
+  --warn-soft: rgba(138, 90, 6, 0.12);
+  --ring: rgba(107, 33, 182, 0.3);
+  --tint: rgba(107, 33, 182, 0.1);
+  --glow-accent: rgba(107, 33, 182, 0.3);
+  --glow-warn: rgba(138, 90, 6, 0.25);
+  --ring-warn: rgba(138, 90, 6, 0.3);
+  --shadow: rgba(45, 18, 62, 0.4);
+  --shadow-soft: rgba(76, 29, 102, 0.14);
+  --overlay: rgba(45, 18, 62, 0.45);
+  --bubble-accent: rgba(107, 33, 182, 0.45);
+  --bubble-warn: rgba(138, 90, 6, 0.4);
+  --bubble-soft: rgba(36, 21, 51, 0.18);
+
+  /* Texto sobre rellenos de color: en claro el bronce es oscuro, así que el
+     blanco se lee mejor que la tinta que se usa en el tema oscuro. */
+  --on-warn: #ffffff;
+  --on-accent: #ffffff;
+  /* Botones: el primario baja de tono para ganar contraste sobre fondo claro. */
+  --btn-primary: linear-gradient(135deg, #6B21B6 0%, #5A1A9C 100%);
+  --btn-primary-hover: linear-gradient(135deg, #5A1A9C 0%, #481480 100%);
+  --btn-secondary-bg: #FFFFFF;
+  --btn-secondary-border: #C3AFD8;
+  --btn-secondary-fg: #5B1E96;
+  --btn-ring: rgba(107, 33, 182, 0.22);
+}

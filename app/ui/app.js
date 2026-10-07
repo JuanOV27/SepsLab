@@ -25,7 +25,24 @@ let state = { screen: "home" };
   let answerStreak = 0;
   let toastTimer = null;
 
+  // El avatar se guarda como emoji (clave estable en localStorage) pero se dibuja
+  // con un SVG propio: los botones de la app usan SVG y los emoji se veían de otro
+  // tipo. Si un valor no está en el mapa, se cae al emoji como texto plano.
   const AVATARS = ["🧪", "🚀", "🧠", "⚡", "🎯", "👾"];
+  const AVATAR_ICONS = {
+    "🧪": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v5l-5.5 8.6A2 2 0 0 0 6.2 19.5h11.6a2 2 0 0 0 1.7-2.9L14 8V3"/><path d="M7.2 14h9.6"/></svg>',
+    "🚀": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5c2.5-2.5 5.5-2.5 5.5-2.5s0 3-2.5 5.5l-3.5 1.2-1.2-1.2 1.2-3z"/><path d="M9 11.5 6 14.5 4.5 20l5.5-1.5 3-3"/><path d="M8.5 15.5 5 16"/><circle cx="16.8" cy="7.2" r="1.1"/></svg>',
+    "🧠": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a3 3 0 0 0-3 3 2.8 2.8 0 0 0-1.5 4.8A3 3 0 0 0 9 18a3 3 0 0 0 3 1.5z"/><path d="M12 4.5a3 3 0 0 1 3 3 2.8 2.8 0 0 1 1.5 4.8A3 3 0 0 1 15 18a3 3 0 0 1-3 1.5z"/><path d="M12 4.5v15"/></svg>',
+    "⚡": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>',
+    "🎯": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1"/></svg>',
+    "👾": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3.5"/><path d="M12 4.5V8M2.5 13v3M21.5 13v3"/><path d="M9 13.5v1.2M15 13.5v1.2"/><path d="M10 17.5h4"/></svg>',
+  };
+
+  function avatarHtml(value) {
+    const key = value || "🧪";
+    const icon = AVATAR_ICONS[key];
+    return icon || escapeHtml(key);
+  }
   const DAILY_TIPS = [
     "Lea la pregunta completa antes de revisar las opciones de respuesta.",
     "Descarte primero la opción evidentemente incorrecta.",
@@ -248,7 +265,10 @@ let spotTimer = null;
     // La sesión de ensayo (CE) no tiene cola de preguntas: getCurrentQuestion
     // explotaría con ella, así que aquí no se pregunta.
     const q = s && s.questions ? engine.getCurrentQuestion(s) : null;
-    return `${state.screen}|${state.modeId}|${q ? q.id : "-"}`;
+    // El índice de revisión entra en la clave: si no, pasar de una marcada a la
+    // siguiente no limpiaría el scroll en el teléfono.
+    const rev = state.screen === "flaggedReview" ? state.reviewIndex : 0;
+    return `${state.screen}|${state.modeId}|${q ? q.id : "-"}|${rev}`;
   }
 
   function render() {
@@ -268,9 +288,11 @@ let spotTimer = null;
     else if (state.screen === "modeConfig") root.innerHTML = renderModeConfig();
     else if (state.screen === "question") { root.innerHTML = renderQuestion(); startTick(); }
     else if (state.screen === "essay") { root.innerHTML = renderEssay(); startTick(); }
+    else if (state.screen === "flaggedReview") { root.innerHTML = renderFlaggedReview(); startTick(); }
     else if (state.screen === "results") root.innerHTML = renderResults();
     else if (state.screen === "essayResults") root.innerHTML = renderEssayResults();
     else if (state.screen === "timeUp") root.innerHTML = renderTimeUp();
+    else if (state.screen === "report") root.innerHTML = renderReport();
     else if (state.screen === "progress") root.innerHTML = renderProgress();
     else root.innerHTML = renderHome();
     // En el teléfono es obligatorio: se lee un pasaje largo con el pulgar y al
@@ -289,7 +311,7 @@ let spotTimer = null;
   // Los ticks solo parchan los nodos del cronómetro (no hacen render() completo)
   // para no perder el foco/cursor del textarea de CE mientras el usuario escribe.
   function tick() {
-    if (state.screen === "question") {
+    if (state.screen === "question" || state.screen === "flaggedReview") {
       updateQuestionTimers();
       // Corte inmediato en Exprés/Simulacro: si se acaba el tiempo mientras la
       // pregunta actual sigue sin responder, no se deja contestarla ni avanzar
@@ -415,7 +437,7 @@ let spotTimer = null;
     const next = 100 - pct;
     return `
       <div class="game-hud${compact ? " compact" : ""}">
-        <div class="avatar-badge" aria-hidden="true">${escapeHtml(pendingAvatar || g.avatar || "🧪")}</div>
+        <div class="avatar-badge" aria-hidden="true">${avatarHtml(pendingAvatar || g.avatar)}</div>
         <div class="game-info">
           <div class="game-top"><span class="level-badge">Nivel ${level}</span><span class="streak" title="Días consecutivos de estudio">Constancia: ${g.streak || 0} día${(g.streak || 0) === 1 ? "" : "s"}</span></div>
           <div class="xp-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="${g.xp || 0} puntos acumulados"><div class="xp-fill" style="width:${pct}%"></div></div>
@@ -436,7 +458,7 @@ let spotTimer = null;
     const level = storage.levelForXp ? storage.levelForXp(game.xp) : Math.floor((game.xp || 0) / 100) + 1;
     const pct = ((game.xp || 0) % 100);
 
-    const avatarBtns = AVATARS.map((a) => `<button type="button" class="avatar-btn${a === pendingAvatar ? " selected" : ""}" data-action="pick-avatar" data-avatar="${a}" aria-label="Elegir avatar ${a}">${a}</button>`).join("");
+    const avatarBtns = AVATARS.map((a) => `<button type="button" class="avatar-btn${a === pendingAvatar ? " selected" : ""}" data-action="pick-avatar" data-avatar="${a}" aria-label="Elegir avatar ${a}">${avatarHtml(a)}</button>`).join("");
     const missions = [
       { id: "practice", label: "Practicar", hint: "Sin presión de tiempo" },
       { id: "simulation", label: "Simulacro", hint: "Al ritmo del examen" },
@@ -449,7 +471,7 @@ let spotTimer = null;
 
     const resumeHtml = profile
       ? `<div class="resume-profile">
-           <span class="resume-avatar" aria-hidden="true">${escapeHtml(profile.avatar || "🧪")}</span>
+           <span class="resume-avatar" aria-hidden="true">${avatarHtml(profile.avatar)}</span>
            <div class="resume-text">
              <strong>${escapeHtml(profile.name)}</strong>
              <span>Nivel ${level} · ${game.streak || 0} día${(game.streak || 0) === 1 ? "" : "s"} de constancia</span>
@@ -608,7 +630,7 @@ let spotTimer = null;
     const r = reward;
     overlay.innerHTML = `
       <div class="reward-card" role="dialog" aria-label="Constancia registrada">
-        <div class="reward-avatar">${escapeHtml((r.game && r.game.avatar) || "🧪")}</div>
+        <div class="reward-avatar">${avatarHtml(r.game && r.game.avatar)}</div>
         <h3>Constancia registrada: +${r.gained} puntos</h3>
         <p class="muted">Días consecutivos de estudio: <strong>${r.game.streak}</strong>${r.leveledUp ? ` · Has alcanzado el <strong>Nivel ${r.level}</strong>.` : ""}</p>
         <button class="btn btn-block" data-action="reward-continue">Continuar a la plataforma</button>
@@ -640,7 +662,7 @@ let spotTimer = null;
         const pct = ((g.xp || 0) % 100);
         homeGame = `
         <div class="card game-hud home-hud">
-          <div class="avatar-badge">${escapeHtml(avatar)}</div>
+          <div class="avatar-badge">${avatarHtml(avatar)}</div>
           <div class="game-info">
             <div class="game-top"><span class="level-badge">Nivel ${level}</span><span class="streak">Constancia: ${g.streak || 0} días · ${g.xp || 0} puntos</span></div>
             <div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
@@ -996,7 +1018,15 @@ let spotTimer = null;
       imageHtml = `<img class="context-image" src="${escapeHtml(context.image.src)}" alt="${escapeHtml(context.image.alt || context.title || "Imagen del cuadernillo")}">`;
     }
     const titleHtml = context.title ? `<strong>${escapeHtml(context.title)}</strong>\n\n` : "";
-    return `<div class="context-box">${titleHtml}${escapeHtml(context.body)}${imageHtml}${tableHtml}</div>`;
+    // Pasajes largos: en Lectura Crítica el texto ocupa media pantalla y en el
+    // teléfono hay que desplazarse para llegar a las opciones. Se recorta con un
+    // botón de "leer más" en vez de quitar el texto.
+    const body = escapeHtml(context.body);
+    const long = (context.body || "").length > 620;
+    const bodyHtml = long
+      ? `<span class="ctx-clip" id="ctx-clip">${body}</span><button class="ctx-more" data-action="toggle-context" aria-expanded="false">Leer más</button>`
+      : body;
+    return `<div class="context-box">${titleHtml}${bodyHtml}${imageHtml}${tableHtml}</div>`;
   }
 
   // Los contextos oficiales viven en contexts[<módulo>]; los del banco de
@@ -1077,8 +1107,23 @@ let spotTimer = null;
       ? `<span class="xp-chip" title="Puntos ganados en esta sesión">⚡ ${xpNow} XP</span>`
       : "";
 
+    const markedCount = (session.markedOrder || []).length;
+    const canMark = state.modeId === "express" || state.modeId === "simulation";
+    const markedHtml = canMark
+      ? `<div class="mark-row">
+           <button class="mark-btn${engine.isMarked(session, q.id) ? " is-on" : ""}" data-action="toggle-mark" aria-pressed="${engine.isMarked(session, q.id)}">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M5 3v18M5 4h11l-2 4 2 4H5"/></svg>
+             ${engine.isMarked(session, q.id) ? "Marcada" : "Marcar para después"}
+           </button>
+           ${markedCount ? `<span class="mark-count">${markedCount} marcada${markedCount === 1 ? "" : "s"}</span>` : ""}
+         </div>`
+      : "";
+
     return `
-      <div class="top-actions"><button class="link-btn" data-action="finish-session">Terminar sesión</button></div>
+      <div class="top-actions">
+        <button class="link-btn" data-action="finish-session">Terminar sesi&oacute;n</button>
+      </div>
+      ${markedHtml}
       <div class="quest-progress" aria-label="Avance de la sesión">
         <span>Pregunta ${qNum} de ${qTotal} · Paso 3 de 4${isLast ? " · Última" : ""}</span>
         <div class="quest-bar"><div class="quest-fill" style="width:${qPct}%"></div></div>
@@ -1155,8 +1200,104 @@ let spotTimer = null;
   }
 
   function finishSession() {
+    // "Marcar y volver": si quedo alguna pregunta marcada y todavia hay tiempo, se
+    // ofrece la revision final antes de cerrar. Si el tiempo ya se acabo, no cabe.
+    const session = state.session;
+    const inReview = state.screen === "flaggedReview";
+    const canReview = !inReview && session && session.questions && (state.modeId === "express" || state.modeId === "simulation");
+    const timeUp = canReview && session.totalTimeLimitMs != null && engine.isTimeUp(session);
+    if (canReview && !timeUp && engine.getMarkedQuestions(session).length) {
+      // La cola guarda posiciones, no ids: el motor responde sobre la pregunta que
+      // está en currentIndex, así que hay que dejar el puntero ahí antes de pintar
+      // (y no dentro de render, que se llama en cada respuesta y reiniciaría el reloj).
+      state.reviewQueue = engine.getMarkedQuestions(session).map((q) => session.questions.indexOf(q));
+      state.reviewIndex = 0;
+      state.answered = false;
+      state.lastAnswer = null;
+      engine.goToIndex(session, state.reviewQueue[0]);
+      state.screen = "flaggedReview";
+      render();
+      return;
+    }
     state.summary = modesApi[state.modeId].finish(state.session);
     state.screen = "results";
+    render();
+  }
+
+  // ---------- pantalla: revision de las marcadas ----------
+
+  function renderFlaggedReview() {
+    const session = state.session;
+    const idx = (state.reviewQueue || [])[state.reviewIndex];
+    const q = idx == null ? null : session.questions[idx];
+    if (!q) {
+      state.summary = modesApi[state.modeId].finish(state.session);
+      state.screen = "results";
+      return render();
+    }
+    const meta = moduleMeta(q.module);
+    const context = findContext(q);
+    const total = (state.reviewQueue || []).length;
+    const pos = state.reviewIndex + 1;
+
+    const optionsHtml = q.options.map((opt) => {
+      let cls = "option";
+      let disabled = "";
+      let mark = "";
+      if (state.answered) {
+        disabled = "disabled";
+        if (opt.key === q.correctOption) { cls += " correct"; mark = `<span class="opt-mark" aria-hidden="true">&#10003;</span>`; }
+        else if (opt.key === state.lastAnswer.selectedOption) { cls += " incorrect"; mark = `<span class="opt-mark" aria-hidden="true">&#10005;</span>`; }
+      }
+      return `<button class="${cls}" data-action="select-option" data-value="${opt.key}" ${disabled}><span class="opt-key">${escapeHtml(opt.key)}</span><span>${escapeHtml(opt.text)}</span>${mark}</button>`;
+    }).join("");
+
+    let feedbackHtml = "";
+    let nextHtml = "";
+    if (state.answered) {
+      const gained = state.lastAnswer.correct
+        ? ((state.lastAnswer.targetMs == null || state.lastAnswer.timeMs <= state.lastAnswer.targetMs) ? 10 : 5) : 0;
+      feedbackHtml = state.lastAnswer.correct
+        ? `<p class="feedback correct">Correcto &mdash; ${fmtMs(state.lastAnswer.timeMs)}${gained ? ` <span class="xp-float">+${gained} XP</span>` : ""}</p>`
+        : `<p class="feedback incorrect">Incorrecto &mdash; la respuesta correcta era ${q.correctOption} &mdash; ${fmtMs(state.lastAnswer.timeMs)}</p>`;
+      // Sin explicación: esta revisión sigue dentro de la sesión cronometrada, y en
+      // Exprés/Simulacro el enunciado se lee una vez, como en el examen real.
+      nextHtml = pos >= total
+        ? `<button class="btn btn-block" data-action="finish-session">Ver resultados</button>`
+        : `<button class="btn btn-block" data-action="review-next">Siguiente marcada (${pos + 1} de ${total})</button>`;
+    }
+
+    return `
+      <div class="top-actions"><button class="link-btn" data-action="finish-session">Terminar sin revisar</button></div>
+      <div class="quest-progress">
+        <span>Revisi&oacute;n final &middot; marcada ${pos} de ${total}</span>
+        <div class="quest-bar"><div class="quest-fill" style="width:${Math.round((pos / total) * 100)}%"></div></div>
+      </div>
+      <div class="timer-bar">
+        <span class="pill" style="background:${meta.color}">${escapeHtml(meta.name)}</span>
+        <span class="pill pill-warn">Marcada para revisar</span>
+        <span class="timer-chip fast" id="question-timer">&#9203; --:--</span>
+      </div>
+      <div class="countdown-track" aria-hidden="true"><div class="countdown-fill fast" id="countdown-fill" style="width:100%"></div></div>
+      ${context ? renderContext(context) : ""}
+      <p class="prompt">${escapeHtml(q.prompt)}</p>
+      <div class="options">${optionsHtml}</div>
+      ${feedbackHtml}
+      ${nextHtml}
+    `;
+  }
+
+  function reviewNext() {
+    state.reviewIndex += 1;
+    state.answered = false;
+    state.lastAnswer = null;
+    const next = (state.reviewQueue || [])[state.reviewIndex];
+    if (next == null) {
+      state.summary = modesApi[state.modeId].finish(state.session);
+      state.screen = "results";
+    } else {
+      engine.goToIndex(state.session, next);
+    }
     render();
   }
 
@@ -1267,7 +1408,7 @@ let spotTimer = null;
     return `
       <div class="card rewards-card">
         <div class="rewards-top">
-          <div class="rewards-avatar" aria-hidden="true">${escapeHtml(pendingAvatar || "🧪")}</div>
+          <div class="rewards-avatar" aria-hidden="true">${avatarHtml(pendingAvatar)}</div>
           <div class="rewards-info">
             <p class="rewards-xp">${xp > 0 ? `+${xp} XP` : "Sesión completada"}</p>
             <p class="muted rewards-sub">Nivel ${level} · 🔥 ${streak} día${streak === 1 ? "" : "s"} de constancia${earnedCount ? ` · ${earnedCount} insignia${earnedCount === 1 ? "" : "s"}` : ""}</p>
@@ -1417,7 +1558,7 @@ let spotTimer = null;
     if (loggedIn && !pendingAvatar) pendingAvatar = (profile && profile.avatar) || "🧪";
     const nameValue = settingsDraftName != null ? settingsDraftName : ((profile && profile.name) || "");
 
-    const avatarBtns = AVATARS.map((a) => `<button type="button" class="avatar-btn${a === pendingAvatar ? " selected" : ""}" data-action="pick-avatar" data-avatar="${a}" aria-label="Elegir avatar ${a}">${a}</button>`).join("");
+    const avatarBtns = AVATARS.map((a) => `<button type="button" class="avatar-btn${a === pendingAvatar ? " selected" : ""}" data-action="pick-avatar" data-avatar="${a}" aria-label="Elegir avatar ${a}">${avatarHtml(a)}</button>`).join("");
 
     const themeRow = `
       <div class="setting-row">
@@ -1572,7 +1713,7 @@ let spotTimer = null;
     return `
       <div class="card progress-hero">
         <div class="progress-hero-top">
-          <div class="rewards-avatar" aria-hidden="true">${escapeHtml(pendingAvatar || "🧪")}</div>
+          <div class="rewards-avatar" aria-hidden="true">${avatarHtml(pendingAvatar)}</div>
           <div class="rewards-info">
             <p class="rewards-xp">Nivel ${level}</p>
             <p class="muted rewards-sub">${game.xp || 0} puntos acumulados · 🔥 ${streak} día${streak === 1 ? "" : "s"} de constancia</p>
@@ -1609,6 +1750,106 @@ let spotTimer = null;
     `;
   }
 
+  // ---------- informe imprimible para el docente ----------
+
+  function renderReport() {
+    const sessions = storage.getSessions().slice().sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+    const user = currentUser();
+    let game = { xp: 0, streak: 0 };
+    try { game = storage.getGame(); } catch (err) { /* noop */ }
+
+    const answered = [];
+    sessions.forEach((s) => {
+      if (!s.answers) return;
+      s.answers.forEach((a) => { if (a.correct != null) answered.push(a); });
+    });
+    const totalQ = answered.length;
+    const totalCorrect = answered.filter((a) => a.correct).length;
+    const acc = totalQ ? totalCorrect / totalQ : null;
+    const avgMs = totalQ ? answered.reduce((a, x) => a + (x.timeMs || 0), 0) / totalQ : null;
+
+    const byModule = {};
+    answered.forEach((a) => {
+      byModule[a.module] = byModule[a.module] || { n: 0, c: 0, ms: 0 };
+      byModule[a.module].n += 1;
+      byModule[a.module].ms += a.timeMs || 0;
+      if (a.correct) byModule[a.module].c += 1;
+    });
+
+    const moduleRows = Object.keys(byModule).map((id) => {
+      const m = byModule[id];
+      const meta = moduleMeta(id);
+      const pct = Math.round((m.c / m.n) * 100);
+      const avg = Math.round(m.ms / m.n / 1000);
+      const target = meta && meta.targetSeconds ? meta.targetSeconds : "—";
+      return `<tr><td>${escapeHtml(meta ? meta.name : id)}</td><td>${m.n}</td><td>${pct}%</td><td>${avg} s</td><td>${target} s</td><td>${pct >= 80 ? "Dominado" : pct >= 60 ? "En progreso" : "En refuerzo"}</td></tr>`;
+    }).join("");
+
+    const rows = sessions.slice().reverse().map((s) => {
+      const d = new Date(s.startedAt);
+      const date = d.toLocaleDateString("es-CO") + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const modeLabel = { practice: "Práctica", simulation: "Simulacro", review: "Repaso", express: "Exprés", training: "Entrenamiento", simulacro2: "Simulacro 2026-2" }[s.mode] || s.mode;
+      const area = s.areaFilter || s.moduleFilter || "Mezcla";
+      if (s.answers) {
+        const sum = statsApi.summarizeSession(s);
+        return `<tr><td>${date}</td><td>${escapeHtml(modeLabel)}</td><td>${escapeHtml(String(area))}</td><td>${sum.total}</td><td>${fmtPercent(sum.overall.accuracy)}</td><td>${fmtMs(sum.overall.avgMs)}</td></tr>`;
+      }
+      return `<tr><td>${date}</td><td>${escapeHtml(modeLabel)}</td><td>CE (ensayo)</td><td>1</td><td>—</td><td>${s.essay.wordCount} palabras</td></tr>`;
+    }).join("");
+
+    return `
+      <div class="no-print top-actions">
+        <button class="link-btn" data-action="go-progress">&larr; Volver al progreso</button>
+        <button class="btn btn-sm" data-action="print-report">Imprimir o guardar en PDF</button>
+      </div>
+      <div class="report-sheet">
+        <header class="report-head">
+          <img class="report-logo" src="assets/images/logo.png" alt="">
+          <div>
+            <h1 style="margin:0;">Informe de progreso</h1>
+            <p class="muted" style="margin:2px 0 0;">SepsLab &middot; Preparaci&oacute;n para las Pruebas Saber Pro (ICFES)</p>
+          </div>
+        </header>
+
+        <section class="report-block">
+          <h2>Estudiante</h2>
+          <p><strong>${escapeHtml((user && user.user) || "Sin cuenta (modo libre)")}</strong> &middot; Informe generado el ${new Date().toLocaleDateString("es-CO")}</p>
+        </section>
+
+        <section class="report-block">
+          <h2>Resumen general</h2>
+          <table>
+            <thead><tr><th>Sesiones</th><th>Preguntas</th><th>Precisión</th><th>Tiempo medio</th><th>Nivel</th><th>Constancia</th></tr></thead>
+            <tbody><tr>
+              <td>${sessions.length}</td><td>${totalQ}</td><td>${acc == null ? "—" : Math.round(acc * 100) + "%"}</td>
+              <td>${avgMs == null ? "—" : fmtMs(avgMs)}</td><td>${storage.levelForXp(game.xp)}</td><td>${game.streak || 0} día${(game.streak || 0) === 1 ? "" : "s"}</td>
+            </tr></tbody>
+          </table>
+        </section>
+
+        ${moduleRows ? `<section class="report-block">
+          <h2>Rendimiento por módulo</h2>
+          <table>
+            <thead><tr><th>Módulo</th><th>Respondidas</th><th>Precisión</th><th>Tiempo medio</th><th>Objetivo</th><th>Situación</th></tr></thead>
+            <tbody>${moduleRows}</tbody>
+          </table>
+        </section>` : ""}
+
+        ${rows ? `<section class="report-block">
+          <h2>Historial de sesiones</h2>
+          <table>
+            <thead><tr><th>Fecha</th><th>Modo</th><th>Área</th><th>Preg.</th><th>Precisión</th><th>Tiempo</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </section>` : `<section class="report-block"><p class="muted">Todavía no hay sesiones registradas.</p></section>`}
+
+        <footer class="report-foot muted">
+          <p>Documento generado por SepsLab. Los datos corresponden al dispositivo donde se practic&oacute;.</p>
+        </footer>
+      </div>
+    `;
+  }
+
   function renderProgress() {
     const sessions = storage.getSessions().slice().sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
 
@@ -1621,6 +1862,7 @@ let spotTimer = null;
         <h2>Tu progreso</h2>
         <p class="muted">Todavía no hay sesiones guardadas. Completa una para empezar a ver tu evolución aquí, o importa un respaldo si ya tenías progreso.</p>
         ${progressGamificationHtml(sessions)}
+        <button class="btn btn-block no-print" data-action="go-report">Informe para el docente</button>
         ${renderDataManagementCard()}
       `;
     }
@@ -1693,6 +1935,7 @@ let spotTimer = null;
         </div>
       </div>
       ${renderDataManagementCard()}
+      <button class="btn btn-block no-print" data-action="go-report" style="margin-top:4px;">Informe para el docente</button>
     `;
   }
 
@@ -1775,8 +2018,30 @@ let spotTimer = null;
     else if (action === "logout") { logout(); return; }
     else if (action === "go-config") startModeConfig(actionEl.dataset.mode);
     else if (action === "go-home") { state = { screen: "home" }; render(); }
+    else if (action === "go-report") { state = { screen: "report" }; render(); return; }
+    else if (action === "print-report") {
+      try { window.print(); } catch (err) { showMessage("Usa el menú del navegador para imprimir o guardar en PDF."); }
+      return;
+    }
     else if (action === "go-progress") { state = { screen: "progress" }; render(); }
+    else if (action === "toggle-context") {
+      const clip = document.getElementById("ctx-clip");
+      if (!clip) return;
+      const open = clip.classList.toggle("is-open");
+      actionEl.textContent = open ? "Leer menos" : "Leer más";
+      actionEl.setAttribute("aria-expanded", String(open));
+      return;
+    }
     else if (action === "start-session") startSession();
+    else if (action === "toggle-mark") {
+      const s = state.session;
+      const q = engine.getCurrentQuestion(s);
+      if (!q) return;
+      engine.toggleMark(s, q.id);
+      render();
+      return;
+    }
+    else if (action === "review-next") { reviewNext(); return; }
     else if (action === "select-option") chooseOption(actionEl.dataset.value);
     else if (action === "next-question") goNext();
     else if (action === "finish-session") finishSession();
@@ -1898,6 +2163,7 @@ let spotTimer = null;
   function init() {
     root = document.getElementById("app");
     applyPrefs();
+    registerServiceWorker();
     root.addEventListener("click", handleClick);
     root.addEventListener("change", handleChange);
     root.addEventListener("input", handleInput);
@@ -1909,6 +2175,18 @@ let spotTimer = null;
       state = { screen: "login" };
     }
     render();
+  }
+
+  // Service worker: da soporte offline a la PWA del navegador. Solo se registra
+  // por http/https: abriendo el archivo con doble clic (file://) el navegador lo
+  // rechaza y la app debe seguir funcionando igual, que es como se usa hoy.
+  function registerServiceWorker() {
+    try {
+      if (!("serviceWorker" in navigator)) return;
+      const proto = location.protocol;
+      if (proto !== "http:" && proto !== "https:") return;
+      navigator.serviceWorker.register("sw.js").catch(() => { /* sin offline, no es grave */ });
+    } catch (err) { /* noop */ }
   }
 
   return { init };

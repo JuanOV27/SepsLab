@@ -7,7 +7,7 @@
     "doc": "docs"
   },
   "scripts": {
-    "auditar": "node tools/auditar.js",
+    "auditar": "node tools/auditar.js && node tools/auditar-ui.js",
     "servidor": "python3 -m http.server 8420 --directory app",
     "sync": "cap sync android",
     "apk": "cap sync android && cd android && ./gradlew assembleDebug"

@@ -40,34 +40,56 @@ window.SESP.core.storage = (function () {
     return readJSON(REVIEW_KEY, {});
   }
 
-  // Repetición espaciada simple: una pregunta queda "pendiente de repaso" en cuanto
-  // se falla o se responde más lento que el objetivo del módulo, y sale de la cola
-  // tras 2 aciertos consecutivos dentro del tiempo objetivo.
+  // Repetición espaciada por cajas (Leitner). Cada pregunta sube de caja mientras se
+  // responde bien y dentro del tiempo objetivo; cada error la devuelve a la primera.
+  // Una pregunta consolidada solo vuelve a la cola cuando le toca por fecha:
+  //
+  //   caja 0 → 1 día    caja 1 → 3 días    caja 2 → 7 días    caja 3 → 16 días
+  //   caja 4 → consolidada: se repasa cada 30 días
+  //
+  // Antes el criterio era binario ("2 aciertos seguidos y sale de la cola"), lo que
+  // mezclaba una pregunta ya dominada con las nuevas sin distinguirlas.
+  const REVIEW_BOX_DAYS = [1, 3, 7, 16, 30];
+  const REVIEW_MASTER_BOX = REVIEW_BOX_DAYS.length - 1;
+
+  function reviewIntervalDays(box) {
+    return REVIEW_BOX_DAYS[Math.max(0, Math.min(REVIEW_MASTER_BOX, box || 0))];
+  }
+
   function applyAnswerToReviewState(reviewState, answer) {
     const entry = reviewState[answer.questionId] || {
       questionId: answer.questionId,
       module: answer.module,
       wrongCount: 0,
       fastCorrectStreak: 0,
+      box: 0,
       dueForReview: false,
+      nextDueAt: null,
       lastSeenAt: null,
     };
+
+    // Datos guardados con la versión anterior: se llevan a la caja 0 sin perder nada.
+    if (entry.box == null) entry.box = 0;
 
     const isFast = answer.targetMs == null || answer.timeMs <= answer.targetMs;
 
     if (!answer.correct) {
       entry.wrongCount += 1;
       entry.fastCorrectStreak = 0;
-      entry.dueForReview = true;
+      entry.box = 0;
     } else if (!isFast) {
+      // Acierto pero lento: no consolida, se queda donde estaba para repetirla.
       entry.fastCorrectStreak = 0;
-      entry.dueForReview = true;
     } else {
       entry.fastCorrectStreak += 1;
-      if (entry.fastCorrectStreak >= 2) entry.dueForReview = false;
+      entry.box = Math.min(REVIEW_MASTER_BOX, (entry.box || 0) + 1);
     }
 
     entry.lastSeenAt = answer.answeredAt;
+    entry.nextDueAt = new Date(Date.now() + reviewIntervalDays(entry.box) * 86400000).toISOString();
+    // Solo entra a la cola inmediata cuando está en caja baja: las mastered
+    // vuelven por calendario, que es justo el efecto que se busca.
+    entry.dueForReview = entry.box < 2;
     reviewState[answer.questionId] = entry;
     return reviewState;
   }
@@ -92,10 +114,35 @@ window.SESP.core.storage = (function () {
 
   function getDueReviewQuestionIds(moduleFilter) {
     const reviewState = getReviewState();
+    const now = Date.now();
     return Object.values(reviewState)
-      .filter((entry) => entry.dueForReview && (!moduleFilter || entry.module === moduleFilter))
-      .sort((a, b) => b.wrongCount - a.wrongCount || String(a.lastSeenAt).localeCompare(String(b.lastSeenAt)))
+      .filter((entry) => {
+        if (moduleFilter && entry.module !== moduleFilter) return false;
+        if (entry.dueForReview) return true;
+        // Las preguntas de caja alta no están en la cola inmediata, pero vuelven
+        // cuando vence su intervalo. Sin este filtro nunca se volverían a ver.
+        if (!entry.nextDueAt) return false;
+        return new Date(entry.nextDueAt).getTime() <= now;
+      })
+      .sort((a, b) => (b.wrongCount || 0) - (a.wrongCount || 0)
+        || String(a.nextDueAt || "9999").localeCompare(String(b.nextDueAt || "9999"))
+        || String(a.lastSeenAt).localeCompare(String(b.lastSeenAt)))
       .map((entry) => entry.questionId);
+  }
+
+  // Resumen de las cajas, para mostrar en la pantalla de Progreso.
+  function getReviewBoxSummary() {
+    const reviewState = getReviewState();
+    const summary = { total: 0, byBox: [0, 0, 0, 0, 0], dueNow: 0 };
+    const now = Date.now();
+    Object.values(reviewState).forEach((entry) => {
+      summary.total += 1;
+      const box = Math.max(0, Math.min(REVIEW_MASTER_BOX, entry.box || 0));
+      summary.byBox[box] += 1;
+      const due = entry.dueForReview || (entry.nextDueAt && new Date(entry.nextDueAt).getTime() <= now);
+      if (due) summary.dueNow += 1;
+    });
+    return summary;
   }
 
   function clearAll() {
@@ -290,6 +337,7 @@ window.SESP.core.storage = (function () {
     recordSession,
     getReviewState,
     getDueReviewQuestionIds,
+    getReviewBoxSummary,
     clearAll,
     exportData,
     importData,

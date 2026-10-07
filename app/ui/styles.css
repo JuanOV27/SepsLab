@@ -1,51 +1,3 @@
-:root {
-  color-scheme: dark; /* evita que el navegador re-invierta colores pensando que la página es clara */
-  /* Sistema de color con roles separados: la acción (acento) y los estados de
-     respuesta (correcto / incorrecto / aviso) nunca comparten matiz, para que un
-     acierto no se confunda con un botón. */
-  --bg: #17101F;
-  --surface: #241733;
-  --surface-2: #2F2043;
-  --surface-hover: #3B2A52;
-  --border: #45335C;
-  --border-strong: #5A4478;
-  --text: #F4F1F7;
-  --text-dim: #B4A7C4;
-
-  --accent: #2BB3CE;        /* acción: botones, foco, enlaces */
-  --accent-hover: #46C2DA;
-  --accent-ink: #06222A;   /* texto sobre acento */
-
-  --good: #3FB98B;         /* respuesta correcta */
-  --good-ink: #06231A;
-  --bad: #F0655F;          /* respuesta incorrecta */
-  --bad-ink: #2A0B0A;
-  --warn: #E0A43A;         /* tiempo, racha, avisos */
-  --warn-ink: #2A1B04;
-  --warn-hi: #F0C878;      /* extremo claro del degradado de bronce */
-
-  --accent-soft: rgba(43, 179, 206, 0.14);
-  --good-soft: rgba(63, 185, 139, 0.16);
-  --bad-soft: rgba(240, 101, 95, 0.16);
-  --warn-soft: rgba(224, 164, 58, 0.14);
-
-  --radius: 10px;
-  --ring: rgba(43, 179, 206, 0.38);
-  --tint: rgba(43, 179, 206, 0.12);
-  --glow-accent: rgba(43, 179, 206, 0.45);
-  --glow-warn: rgba(224, 164, 58, 0.35);
-  --ring-warn: rgba(224, 164, 58, 0.35);
-  --shadow: rgba(0, 0, 0, 0.45);
-  --shadow-soft: rgba(0, 0, 0, 0.35);
-  --overlay: rgba(0, 0, 0, 0.6);
-  --bubble-accent: rgba(43, 179, 206, 0.5);
-  --bubble-warn: rgba(224, 164, 58, 0.45);
-  --bubble-soft: rgba(244, 241, 247, 0.28);
-
-  --on-accent: #ffffff;
-  --on-warn: #1a1030;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -2249,54 +2201,6 @@ h2 { font-size: clamp(1.2rem, 3.5vw + 0.5rem, 1.6rem); }
 /* Modo claro: el mismo amatista de marca, pero lavado y suave.
    Se mantiene el morado como primario para que la identidad no cambie con el tema;
    el cyan queda relegado a detalles y los estados usan verde/coral/bronce legibles. */
-html[data-theme="light"] {
-  color-scheme: light;
-  --bg: #F4F1F9;
-  --surface: #FFFFFF;
-  --surface-2: #F1EBF8;
-  --surface-hover: #E7DEF3;
-  --border: #DCD0E9;
-  --border-strong: #C3AFD8;
-  --text: #241533;
-  --text-dim: #63507A;
-  --accent: #6B21B6;
-  --accent-hover: #5A1A9C;
-  --accent-ink: #FFFFFF;
-  --good: #157A57;
-  --good-ink: #FFFFFF;
-  --bad: #C0392B;
-  --bad-ink: #FFFFFF;
-  --warn: #8A5A06;
-  --warn-ink: #FFFFFF;
-  --warn-hi: #C08A1E;
-  --accent-soft: rgba(107, 33, 182, 0.1);
-  --good-soft: rgba(21, 122, 87, 0.12);
-  --bad-soft: rgba(192, 57, 43, 0.1);
-  --warn-soft: rgba(138, 90, 6, 0.12);
-  --ring: rgba(107, 33, 182, 0.3);
-  --tint: rgba(107, 33, 182, 0.1);
-  --glow-accent: rgba(107, 33, 182, 0.3);
-  --glow-warn: rgba(138, 90, 6, 0.25);
-  --ring-warn: rgba(138, 90, 6, 0.3);
-  --shadow: rgba(45, 18, 62, 0.4);
-  --shadow-soft: rgba(76, 29, 102, 0.14);
-  --overlay: rgba(45, 18, 62, 0.45);
-  --bubble-accent: rgba(107, 33, 182, 0.45);
-  --bubble-warn: rgba(138, 90, 6, 0.4);
-  --bubble-soft: rgba(36, 21, 51, 0.18);
-
-  /* Texto sobre rellenos de color: en claro el bronce es oscuro, asi que el
-     blanco se lee mejor que la tinta que se usa en el tema oscuro. */
-  --on-warn: #ffffff;
-  --on-accent: #ffffff;
-  /* Botones: el primario baja de tono para ganar contraste sobre fondo claro. */
-  --btn-primary: linear-gradient(135deg, #6B21B6 0%, #5A1A9C 100%);
-  --btn-primary-hover: linear-gradient(135deg, #5A1A9C 0%, #481480 100%);
-  --btn-secondary-bg: #FFFFFF;
-  --btn-secondary-border: #C3AFD8;
-  --btn-secondary-fg: #5B1E96;
-  --btn-ring: rgba(107, 33, 182, 0.22);
-}
 
 html[data-theme="light"] body {
   background-image:
@@ -3689,4 +3593,157 @@ html[data-contrast="high"] .opt-mark {
   #app { padding-top: calc(10px + env(safe-area-inset-top)); }
   .timer-bar { padding: 4px 0; margin-top: -4px; }
   .modal-box { max-height: 92vh; }
+}
+
+/* ---------- Marcar y volver (Expres / Simulacro) ---------- */
+.mark-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.mark-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.82em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.mark-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.mark-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.mark-btn.is-on {
+  color: var(--warn);
+  border-style: solid;
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.mark-count {
+  font-size: 0.78em;
+  color: var(--text-dim);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .mark-btn { min-height: 40px; }
+}
+
+/* ---------- Contextos largos plegables ---------- */
+.ctx-clip {
+  display: block;
+  max-height: 11em;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+
+.ctx-clip.is-open {
+  max-height: none;
+}
+
+.ctx-more {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85em;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 8px 0 2px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Avatares en SVG ---------- */
+.avatar-badge svg,
+.resume-avatar svg,
+.reward-avatar svg,
+.rewards-avatar svg,
+.avatar-btn svg {
+  width: 62%;
+  height: 62%;
+  display: block;
+}
+
+.avatar-btn {
+  color: var(--text);
+}
+
+.avatar-btn.selected {
+  color: var(--warn);
+}
+
+/* ---------- Informe imprimible ---------- */
+.report-sheet {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+}
+
+.report-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--border);
+}
+
+.report-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 2px;
+}
+
+.report-block {
+  margin-top: 18px;
+}
+
+.report-block h2 {
+  font-size: 1em;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-foot {
+  margin-top: 20px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.78em;
+}
+
+@media print {
+  /* Al imprimir solo sale el informe: sin burbujas, sin botones, sin fondo. */
+  body { background: #fff !important; }
+  .bubbles, .no-print, .top-actions, .modal-overlay { display: none !important; }
+  #app { max-width: none; padding: 0; }
+  .report-sheet { border: none; padding: 0; background: #fff; }
+  .report-block { break-inside: avoid; }
+  table { font-size: 11px; }
+  th, td { border-color: #bbb !important; color: #000 !important; }
+  h1, h2, strong { color: #000 !important; }
+  .muted { color: #555 !important; }
 }

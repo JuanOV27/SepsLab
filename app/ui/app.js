@@ -18,6 +18,10 @@ let state = { screen: "home" };
   let pendingConfirmCallback = null;
   let pendingAvatar = null;
   let pendingReward = null;
+  let pendingStartMode = null;
+  let sessionRewarded = false;
+  let settingsDraftName = null;
+  let settingsReturn = { screen: "home" };
   let answerStreak = 0;
   let toastTimer = null;
 
@@ -131,19 +135,25 @@ let state = { screen: "home" };
     return scale >= 1.25 ? "Texto: muy grande" : scale >= 1.125 ? "Texto: grande" : "Texto: normal";
   }
 
-  function controlsHtml() {
+  function themeButtonHtml() {
     const p = getPrefs();
     const isLight = p.theme === "light";
-    const themeSvg = isLight
+    const svg = isLight
       ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
-    return `
-      <span class="a11y-controls" role="group" aria-label="Apariencia y accesibilidad">
-        <button class="chip-btn" data-action="toggle-theme" title="${isLight ? "Cambiar a modo oscuro" : "Cambiar a modo claro"}" aria-label="${isLight ? "Cambiar a modo oscuro" : "Cambiar a modo claro"}">${themeSvg}</button>
-        <button class="chip-btn" data-action="cycle-font" title="Tamaño de texto: ${fontLabel(p.fontScale).toLowerCase()}. Activar para cambiar." aria-label="Cambiar tamaño de texto. Actual: ${fontLabel(p.fontScale).toLowerCase()}"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" text-anchor="middle" font-size="14" font-weight="800" fill="currentColor">A</text></svg></button>
-        <button class="chip-btn${p.highContrast ? " is-on" : ""}" data-action="toggle-contrast" title="Alto contraste: ${p.highContrast ? "activado" : "desactivado"}" aria-label="Alternar alto contraste" aria-pressed="${p.highContrast}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg></button>
-      </span>
-    `;
+    const label = isLight ? "Cambiar a modo oscuro" : "Cambiar a modo claro";
+    return `<button class="chip-btn" data-action="toggle-theme" title="${label}" aria-label="${label}" aria-pressed="${isLight}">${svg}</button>`;
+  }
+
+  function fontButtonHtml() {
+    const p = getPrefs();
+    const label = fontLabel(p.fontScale).toLowerCase();
+    return `<button class="chip-btn" data-action="cycle-font" title="Tamaño de texto: ${label}. Activar para cambiar." aria-label="Cambiar tamaño de texto. Actual: ${label}"><svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17" text-anchor="middle" font-size="14" font-weight="800" fill="currentColor">A</text></svg></button>`;
+  }
+
+  function contrastButtonHtml() {
+    const p = getPrefs();
+    return `<button class="chip-btn${p.highContrast ? " is-on" : ""}" data-action="toggle-contrast" title="Alto contraste: ${p.highContrast ? "activado" : "desactivado"}" aria-label="Alternar alto contraste" aria-pressed="${p.highContrast}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg></button>`;
   }
 
   // Micro-celebración sobria de rachas, sin confeti: toast inferior que se disipa solo.
@@ -246,14 +256,15 @@ let spotTimer = null;
     stopSpotlight();
     stopLoginTip();
     if (!root) return;
-const key = currentRenderKey();
+    const key = currentRenderKey();
     const changed = key !== lastRenderKey;
     lastRenderKey = key;
     // El login es opcional: la práctica se abre directo, como antes. Quien quiera
     // la cuenta (avatar, XP y racha) la pide desde el inicio, y entonces sí se
     // guarda en el navegador.
-    if (state.screen === "login") { root.innerHTML = renderLogin(); startLoginTip(); }
+    if (state.screen === "login") { root.innerHTML = renderLogin(); startLoginTip(); runSplash(); }
     else if (state.screen === "home") root.innerHTML = renderHome();
+    else if (state.screen === "settings") root.innerHTML = renderSettings();
     else if (state.screen === "modeConfig") root.innerHTML = renderModeConfig();
     else if (state.screen === "question") { root.innerHTML = renderQuestion(); startTick(); }
     else if (state.screen === "essay") { root.innerHTML = renderEssay(); startTick(); }
@@ -366,6 +377,30 @@ const key = currentRenderKey();
     }
   }
 
+  // Racha y XP de la sesión en curso (se muestran junto al cronómetro).
+  function sessionStreak(answers) {
+    const list = answers || [];
+    let n = 0;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const a = list[i];
+      if (a.correct === true) n += 1;
+      else if (a.correct === false) break;
+      // Las preguntas sin clave (correct === null) no cortan la racha.
+    }
+    return n;
+  }
+
+  function sessionXp(answers) {
+    const list = answers || [];
+    let xp = 0;
+    list.forEach((a) => {
+      if (a.correct !== true) return;
+      const isFast = a.targetMs == null || a.timeMs <= a.targetMs;
+      xp += isFast ? 10 : 5;
+    });
+    return xp;
+  }
+
   // ---------- pantalla: login ----------
 
   function currentUser() {
@@ -391,64 +426,155 @@ const key = currentRenderKey();
   }
 
   function renderLogin() {
-    let remembered = "";
-    try { remembered = storage.getRememberedUser() || ""; } catch (err) { remembered = ""; }
-    try {
-      const g = storage.getGame();
-      if (!pendingAvatar) pendingAvatar = g.avatar || "🧪";
-    } catch (err) { if (!pendingAvatar) pendingAvatar = "🧪"; }
+    let profile = null;
+    try { profile = storage.getProfile(); } catch (err) { profile = null; }
+    let game = { xp: 0, streak: 0, avatar: "🧪" };
+    try { game = storage.getGame(); } catch (err) { /* noop */ }
+    if (!pendingAvatar) pendingAvatar = (profile && profile.avatar) || game.avatar || "🧪";
+    if (pendingAvatar) game.avatar = pendingAvatar;
+
+    const level = storage.levelForXp ? storage.levelForXp(game.xp) : Math.floor((game.xp || 0) / 100) + 1;
+    const pct = ((game.xp || 0) % 100);
+
+    const avatarBtns = AVATARS.map((a) => `<button type="button" class="avatar-btn${a === pendingAvatar ? " selected" : ""}" data-action="pick-avatar" data-avatar="${a}" aria-label="Elegir avatar ${a}">${a}</button>`).join("");
+    const missions = [
+      { id: "practice", label: "Practicar", hint: "Sin presión de tiempo" },
+      { id: "simulation", label: "Simulacro", hint: "Al ritmo del examen" },
+      { id: "review", label: "Repasar", hint: "Tus errores" },
+    ].map((m) => `
+      <button type="button" class="mission-chip${pendingStartMode === m.id ? " selected" : ""}" data-action="pick-mission" data-mode="${m.id}" aria-pressed="${pendingStartMode === m.id}">
+        <b>${m.label}</b><span>${m.hint}</span>
+      </button>
+    `).join("");
+
+    const resumeHtml = profile
+      ? `<div class="resume-profile">
+           <span class="resume-avatar" aria-hidden="true">${escapeHtml(profile.avatar || "🧪")}</span>
+           <div class="resume-text">
+             <strong>${escapeHtml(profile.name)}</strong>
+             <span>Nivel ${level} · ${game.streak || 0} día${(game.streak || 0) === 1 ? "" : "s"} de constancia</span>
+           </div>
+           <button class="btn btn-block" data-action="resume-profile">Continuar</button>
+         </div>
+         <button class="link-btn center" data-action="change-profile">Usar otro nombre</button>`
+      : "";
+
     return `
       <div class="login-minimal academic">
-        <div class="login-topbar anim-in" style="--d:0s">${controlsHtml()}</div>
-        <header class="login-brand anim-in" style="--d:.05s">
-          <img class="logo logo-animated" src="assets/images/logo.png" alt="Logotipo institucional de SepsLab" onerror="this.outerHTML='<div class=&quot;logo-fallback&quot; aria-hidden=&quot;true&quot;>SL</div>'">
-          <p class="brand-kicker">Plataforma de preparación · Saber Pro</p>
-          <h1>SepsLab</h1>
-          <p class="muted">Práctica con cuadernillos oficiales del ICFES</p>
-        </header>
-        <main class="card login-card login-pro anim-in" style="--d:.15s" aria-label="Acceso a la plataforma">
-          <h2 class="login-title">Iniciar sesión</h2>
-          <div id="login-error-box" class="error-summary" role="alert"></div>
-          <form id="login-form" novalidate>
-            <div class="field">
-              <label for="login-username">Usuario o correo electrónico</label>
-              <div class="input-wrap"><svg class="input-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><input type="text" id="login-username" autocomplete="username" inputmode="email" placeholder="usuario@correo.com" value="${escapeHtml(remembered)}"></div>
-              <div class="field-error" id="login-uErr"></div>
-            </div>
-            <div class="field">
-              <label for="login-password">Contraseña</label>
-              <div class="input-group input-wrap"><svg class="input-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input type="password" id="login-password" autocomplete="current-password" placeholder="Ingrese su contraseña">
-                <button type="button" class="icon-btn" data-action="toggle-password" aria-label="Mostrar contraseña" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <div class="login-split">
+          <section class="login-aside">
+            <div class="login-aside-brand">
+              <img class="logo logo-animated" src="assets/images/logo.png" alt="Logotipo institucional de SepsLab" onerror="this.outerHTML='<div class=&quot;logo-fallback&quot; aria-hidden=&quot;true&quot;>SL</div>'">
+              <div class="aside-titles">
+                <p class="brand-kicker">Plataforma de preparación · Saber Pro</p>
+                <h1>SepsLab</h1>
+                <p class="muted">Práctica con cuadernillos oficiales del ICFES</p>
               </div>
-              <div class="caps-warn" id="capsWarn">Bloq Mayús activado — revise su contraseña.</div>
-              <div class="field-error" id="login-pErr"></div>
             </div>
-            <div class="row-between">
-              <label class="check"><input type="checkbox" id="login-remember" ${remembered ? "checked" : ""}> Mantener la sesión iniciada</label>
-              <button type="button" class="link-btn" data-action="login-forgot">¿Olvidó su contraseña?</button>
+            <ul class="aside-points">
+              <li>Preguntas reales de los cuadernillos ICFES 2018 y tu simulacro 2026-2</li>
+              <li>Cronómetro por pregunta con el objetivo de 90 a 100 segundos</li>
+              <li>Entrenamiento con explicación resuelta en cada respuesta</li>
+              <li>Progreso guardado en este equipo, sin cuenta ni contraseña</li>
+            </ul>
+            <div class="tip-card" id="login-tip" aria-live="polite">
+              <svg class="tip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+              <div class="tip-body">
+                <p class="tip-kicker">Consejo de estudio</p>
+                <p class="tip-text" id="login-tip-text"></p>
+              </div>
             </div>
-            <button type="submit" class="btn btn-block btn-arrow" id="login-submit"><span class="label">Ingresar a la plataforma</span><span class="spinner" aria-hidden="true"></span></button>
-          </form>
-          <div class="divider"><span>o continúe sin una cuenta</span></div>
-          <button type="button" class="btn btn-secondary btn-block" data-action="login-guest">Explorar como invitado</button>
-          <ul class="trust-list" aria-label="Garantías del servicio">
-            <li>Datos almacenados únicamente en este navegador</li>
-            <li>Preguntas oficiales ICFES 2018 y simulacro 2026-2</li>
-          </ul>
-        </main>
-        <footer class="login-footer anim-in" style="--d:.25s">
-          <div class="tip-card" id="login-tip" aria-live="polite">
-            <svg class="tip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
-            <div class="tip-body">
-              <p class="tip-kicker">Consejo de estudio</p>
-              <p class="tip-text" id="login-tip-text"></p>
+            <div class="aside-foot">
+              <button class="login-settings-btn" data-action="go-settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+                <span>Ajustes de apariencia</span>
+              </button>
+              <p class="muted aside-copy">© 2026 SepsLab · Uso académico y formativo</p>
             </div>
+          </section>
+          <main class="card login-card login-pro game-login" aria-label="Crear perfil de jugador">
+          <h2 class="login-title">Crea tu perfil</h2>
+          <p class="muted center">Sin correo ni contraseña. Tu progreso se guarda en este navegador.</p>
+          ${resumeHtml}
+          <div class="field">
+            <label id="avatar-label">1 · Elige tu avatar</label>
+            <div class="avatar-row" role="radiogroup" aria-labelledby="avatar-label">${avatarBtns}</div>
           </div>
-          <p class="muted">© 2026 SepsLab · Uso académico y formativo</p>
-        </footer>
+          <div class="field">
+            <label for="login-username">2 · Tu nombre</label>
+            <input type="text" id="login-username" maxlength="16" autocomplete="nickname" placeholder="¿Cómo te llamamos?" value="">
+            <div class="field-error" id="login-uErr"></div>
+          </div>
+          <div class="field">
+            <label id="mission-label">3 · Tu primera misión</label>
+            <div class="mission-picker" role="radiogroup" aria-labelledby="mission-label">${missions}</div>
+          </div>
+          <div id="login-error-box" class="error-summary" role="alert"></div>
+          <button class="btn btn-block" data-action="create-profile">Comenzar mi preparación →</button>
+        </main>
+        </div>
+      </div>
+      <div id="splash" class="splash" aria-hidden="true">
+        <div class="splash-inner">
+          <img class="splash-logo" src="assets/images/logo.png" alt="">
+          <p class="splash-title">Bienvenido a <strong>SepsLab</strong></p>
+          <p class="splash-sub">Práctica para las Pruebas Saber Pro</p>
+        </div>
+        <div class="splash-bar"><span></span></div>
       </div>
       <div id="reward-overlay" aria-live="polite"></div>
     `;
+  }
+
+  // ---------- perfil: crea o retoma el guardado de progreso ----------
+
+  function startProfile(name) {
+    const uv = String(name || "").trim();
+    if (uv.length < 2) {
+      loginFail("login-uErr", "Escribe un nombre de al menos 2 letras.", document.getElementById("login-username"));
+      return;
+    }
+    let reward = null;
+    try {
+      storage.setAvatar(pendingAvatar);
+      storage.setProfile({ name: uv, avatar: pendingAvatar, createdAt: new Date().toISOString() });
+      storage.setCurrentUser({ user: uv, ts: new Date().toISOString(), guest: false, avatar: pendingAvatar });
+      storage.setRememberedUser(uv);
+      reward = storage.awardLogin();
+      if (reward && reward.game) reward.game.avatar = pendingAvatar;
+    } catch (err) { /* noop */ }
+    const target = pendingStartMode;
+    if (reward && document.getElementById("reward-overlay")) showReward(reward, target);
+    else { state = { screen: "home" }; render(); if (target) startModeConfig(target); }
+  }
+
+  function resumeProfile() {
+    let profile = null;
+    try { profile = storage.getProfile(); } catch (err) { profile = null; }
+    if (!profile) { state = { screen: "login" }; render(); return; }
+    let reward = null;
+    try {
+      storage.setCurrentUser({ user: profile.name, ts: new Date().toISOString(), guest: false, avatar: profile.avatar });
+      reward = storage.awardLogin();
+      if (reward && reward.game) reward.game.avatar = profile.avatar;
+    } catch (err) { /* noop */ }
+    if (reward && document.getElementById("reward-overlay")) showReward(reward, pendingStartMode);
+    else { state = { screen: "home" }; render(); if (pendingStartMode) startModeConfig(pendingStartMode); }
+  }
+
+  // Bienvenida: se muestra una sola vez al entrar al login (no si ya hay sesión).
+  let splashShown = false;
+
+  function runSplash() {
+    const el = document.getElementById("splash");
+    if (!el || splashShown) return;
+    splashShown = true;
+    el.classList.add("is-on");
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setTimeout(() => {
+      el.classList.add("is-out");
+      setTimeout(() => el.remove(), 480);
+    }, reduce ? 700 : 1900);
   }
 
   function loginFail(fieldErrId, msg, inputEl) {
@@ -463,80 +589,34 @@ const key = currentRenderKey();
     if (el) el.textContent = "";
   }
 
-  function doLogin() {
-    const uEl = document.getElementById("login-username");
-    const pEl = document.getElementById("login-password");
-    const rEl = document.getElementById("login-remember");
-    const box = document.getElementById("login-error-box");
-    const btn = document.getElementById("login-submit");
-    if (!uEl || !pEl) return;
-    if (box) { box.classList.remove("show"); box.textContent = ""; }
-    const uv = uEl.value.trim();
-    const pv = pEl.value;
-    let ok = true;
-    clearLoginError(uEl, "login-uErr");
-    clearLoginError(pEl, "login-pErr");
-    if (!uv) { loginFail("login-uErr", "Ingrese su usuario o correo electrónico.", uEl); ok = false; }
-    else if (uv.includes("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(uv)) { loginFail("login-uErr", "El correo electrónico no es válido.", uEl); ok = false; }
-    if (pv.length < 6) { loginFail("login-pErr", "La contraseña debe tener mínimo 6 caracteres.", pEl); ok = false; }
-    if (!ok) {
-      if (box) { box.textContent = "Revise los campos marcados."; box.classList.add("show"); }
-      return;
-    }
-    if (btn) { btn.classList.add("loading"); btn.disabled = true; }
-    // Auth local simulada: cualquier credencial válida entra. Sin servidor.
-    setTimeout(() => {
-      let reward = null;
-      try {
-        if (pendingAvatar) storage.setAvatar(pendingAvatar);
-        reward = storage.awardLogin();
-        if (reward && reward.game) reward.game.avatar = pendingAvatar || reward.game.avatar;
-        storage.setCurrentUser({ user: uv, ts: new Date().toISOString(), guest: false, avatar: pendingAvatar });
-        storage.setRememberedUser(rEl && rEl.checked ? uv : "");
-      } catch (err) { /* noop */ }
-      if (reward) showReward(reward);
-      else { state = { screen: "home" }; render(); }
-    }, 450);
-  }
-
-  function loginAsGuest() {
-    let reward = null;
-    try {
-      if (pendingAvatar) storage.setAvatar(pendingAvatar);
-      reward = storage.awardLogin();
-      storage.setCurrentUser({ user: "invitado", ts: new Date().toISOString(), guest: true, avatar: pendingAvatar });
-    } catch (err) { /* noop */ }
-    if (reward && document.getElementById("reward-overlay")) showReward(reward);
-    else { state = { screen: "home" }; render(); }
-  }
-
   function logout() {
     try { storage.clearCurrentUser(); } catch (err) { /* noop */ }
+    pendingStartMode = null;
     state = { screen: "login" };
     render();
   }
 
-  function showReward(reward) {
+  function showReward(reward, nextMode) {
     pendingReward = reward;
     const overlay = document.getElementById("reward-overlay");
-    if (!overlay) {
+    const go = () => {
       state = { screen: "home" };
       render();
-      return;
-    }
+      if (nextMode) startModeConfig(nextMode);
+    };
+    if (!overlay) { go(); return; }
     const r = reward;
     overlay.innerHTML = `
       <div class="reward-card" role="dialog" aria-label="Constancia registrada">
         <div class="reward-avatar">${escapeHtml((r.game && r.game.avatar) || "🧪")}</div>
         <h3>Constancia registrada: +${r.gained} puntos</h3>
-        <p class="muted">Días consecutivos de estudio: <strong>${r.game.streak}</strong>${r.leveledUp ? ` · Ha alcanzado el <strong>Nivel ${r.level}</strong>.` : ""}</p>
+        <p class="muted">Días consecutivos de estudio: <strong>${r.game.streak}</strong>${r.leveledUp ? ` · Has alcanzado el <strong>Nivel ${r.level}</strong>.` : ""}</p>
         <button class="btn btn-block" data-action="reward-continue">Continuar a la plataforma</button>
       </div>
     `;
     overlay.classList.add("show");
-    // Enfoque académico: sin confeti, transición sobria.
     setTimeout(() => {
-      if (pendingReward) { pendingReward = null; state = { screen: "home" }; render(); }
+      if (pendingReward) { pendingReward = null; go(); }
     }, 3200);
   }
 
@@ -573,7 +653,7 @@ const key = currentRenderKey();
         ${user
           ? `<span class="muted">Hola, <strong style="color:var(--text);">${userLabel}</strong>${guestTag}</span>`
           : `<span class="muted">Puedes practicar sin cuenta.</span>`}
-        <span class="home-tools">${controlsHtml()}${user
+        <span class="home-tools"><button class="btn btn-secondary btn-sm" data-action="go-settings">Ajustes</button>${user
           ? `<button class="link-btn" data-action="logout">Cerrar sesión</button>`
           : `<button class="link-btn" data-action="login">Iniciar sesión</button>`}</span>
       </div>
@@ -884,6 +964,7 @@ const key = currentRenderKey();
       state.answered = false;
       state.lastAnswer = null;
       answerStreak = 0;
+      sessionRewarded = false;
       state.screen = session.kind === "essay" ? "essay" : "question";
       render();
     } catch (err) {
@@ -944,19 +1025,24 @@ const key = currentRenderKey();
     const optionsHtml = q.options.map((opt) => {
       let cls = "option";
       let disabled = "";
+      let mark = "";
       if (state.answered) {
         disabled = "disabled";
-        if (opt.key === q.correctOption) cls += " correct";
-        else if (opt.key === state.lastAnswer.selectedOption) cls += " incorrect";
+        if (opt.key === q.correctOption) { cls += " correct"; mark = `<span class="opt-mark" aria-hidden="true">✓</span>`; }
+        else if (opt.key === state.lastAnswer.selectedOption) { cls += " incorrect"; mark = `<span class="opt-mark" aria-hidden="true">✕</span>`; }
       }
-      return `<button class="${cls}" data-action="select-option" data-value="${opt.key}" ${disabled}><span class="opt-key">${escapeHtml(opt.key)}</span><span>${escapeHtml(opt.text)}</span></button>`;
+      return `<button class="${cls}" data-action="select-option" data-value="${opt.key}" ${disabled}><span class="opt-key">${escapeHtml(opt.key)}</span><span>${escapeHtml(opt.text)}</span>${mark}</button>`;
     }).join("");
 
     let feedbackHtml = "";
     let nextButtonHtml = "";
     if (state.answered) {
+      const gained = state.lastAnswer.correct
+        ? ((state.lastAnswer.targetMs == null || state.lastAnswer.timeMs <= state.lastAnswer.targetMs) ? 10 : 5)
+        : 0;
+      const xpFloat = gained ? `<span class="xp-float">+${gained} XP</span>` : "";
       feedbackHtml = state.lastAnswer.correct
-        ? `<p class="feedback correct">Correcto — ${fmtMs(state.lastAnswer.timeMs)}</p>`
+        ? `<p class="feedback correct">¡Correcto! — ${fmtMs(state.lastAnswer.timeMs)}${gained < 10 ? " (lento)" : " (en el objetivo)"} ${xpFloat}</p>`
         : `<p class="feedback incorrect">Incorrecto — la respuesta correcta era ${q.correctOption} — ${fmtMs(state.lastAnswer.timeMs)}</p>`;
       // Entrenamiento explica siempre. Repaso explica solo al fallar: llegar aquí ya
       // significa haberla fallado antes, así que un segundo error es justo donde deja
@@ -980,15 +1066,28 @@ const key = currentRenderKey();
     const qTotal = session.questions ? session.questions.length : 0;
     const qNum = Math.min(session.currentIndex + 1, qTotal);
     const qPct = qTotal ? Math.round((session.currentIndex / qTotal) * 100) : 0;
+    const isLast = qNum === qTotal;
+    const streakNow = sessionStreak(session.answers);
+    const xpNow = sessionXp(session.answers);
+
+    const comboHtml = streakNow >= 2
+      ? `<span class="combo-chip is-on" title="Aciertos seguidos en esta sesión">🔥 ${streakNow}</span>`
+      : "";
+    const xpHtml = xpNow > 0
+      ? `<span class="xp-chip" title="Puntos ganados en esta sesión">⚡ ${xpNow} XP</span>`
+      : "";
+
     return `
       <div class="top-actions"><button class="link-btn" data-action="finish-session">Terminar sesión</button></div>
       <div class="quest-progress" aria-label="Avance de la sesión">
-        <span>Pregunta ${qNum} de ${qTotal} · Paso 3 de 4</span>
+        <span>Pregunta ${qNum} de ${qTotal} · Paso 3 de 4${isLast ? " · Última" : ""}</span>
         <div class="quest-bar"><div class="quest-fill" style="width:${qPct}%"></div></div>
       </div>
       <div class="timer-bar">
         <span class="pill" style="background:${meta.color}">${meta.name}</span>
         ${q.generated ? `<span class="pill pill-warn" title="Pregunta escrita para este proyecto, no tomada de un cuadernillo del ICFES">No oficial</span>` : ""}
+        ${comboHtml}
+        ${xpHtml}
         <span class="timer-chip fast" id="question-timer">⏳ --:--</span>
         ${totalTimerHtml}
       </div>
@@ -1121,6 +1220,75 @@ const key = currentRenderKey();
     ));
   }
 
+  // ---------- gamificación de la sesión: XP, nivel e insignias ----------
+
+  function renderSessionRewards(summary) {
+    if (!summary || !summary.overall) return "";
+    let game;
+    try { game = storage.getGame(); } catch (err) { return ""; }
+
+    const c = summary.overall.classifications || {};
+    const fast = c["rapida-correcta"] || 0;
+    const slowOk = c["lenta-correcta"] || 0;
+    const wrong = (c["rapida-incorrecta"] || 0) + (c["lenta-incorrecta"] || 0);
+    const acc = summary.overall.accuracy;
+    const total = summary.total || 0;
+
+    // El XP se otorga una sola vez por sesión, aunque la pantalla se repinte.
+    let xp = 0;
+    if (!sessionRewarded) {
+      xp = fast * 10 + slowOk * 5;
+      if (acc != null && acc >= 0.8) xp += 25;
+      if (total >= 5 && wrong === 0) xp += 15;
+      if (total >= 10 && acc != null && acc >= 0.6) xp += 10;
+      sessionRewarded = true;
+      if (xp > 0) {
+        game.xp = (game.xp || 0) + xp;
+        try { storage.saveGame(game); } catch (err) { /* noop */ }
+      }
+    }
+
+    const level = storage.levelForXp(game.xp);
+    const pct = (game.xp || 0) % 100;
+    const leveledUp = xp > 0 && pct < xp;
+    const streak = game.streak || 0;
+
+    const badges = [
+      { icon: "🎯", title: "Precisión 80%+", hint: "Acierta el 80% de la sesión", earned: acc != null && acc >= 0.8 },
+      { icon: "⚡", title: "Ritmo del examen", hint: "5 respuestas rápidas y correctas", earned: fast >= 5 },
+      { icon: "🛡️", title: "Sin errores", hint: "Termina sin fallar ninguna", earned: total >= 5 && wrong === 0 },
+      { icon: "🔥", title: "Constancia 3+", hint: "Tres días seguidos entrando", earned: streak >= 3 },
+      { icon: "💎", title: "Sesión perfecta", hint: "Todo correcto con 8+ preguntas", earned: acc === 1 && total >= 8 },
+      { icon: "⏱️", title: "Dominio del tiempo", hint: "Promedio dentro del objetivo", earned: summary.overall.avgMs != null && summary.overall.avgMs <= 95000 },
+    ];
+
+    const earnedCount = badges.filter((b) => b.earned).length;
+
+    return `
+      <div class="card rewards-card">
+        <div class="rewards-top">
+          <div class="rewards-avatar" aria-hidden="true">${escapeHtml(pendingAvatar || "🧪")}</div>
+          <div class="rewards-info">
+            <p class="rewards-xp">${xp > 0 ? `+${xp} XP` : "Sesión completada"}</p>
+            <p class="muted rewards-sub">Nivel ${level} · 🔥 ${streak} día${streak === 1 ? "" : "s"} de constancia${earnedCount ? ` · ${earnedCount} insignia${earnedCount === 1 ? "" : "s"}` : ""}</p>
+            <div class="xp-bar rewards-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
+            <p class="xp-label">${pct}/100 puntos · faltan ${100 - pct} para el Nivel ${level + 1}</p>
+          </div>
+        </div>
+        ${leveledUp ? `<p class="level-up">🎉 ¡Subiste al Nivel ${level}!</p>` : ""}
+        <div class="badges-grid" role="list" aria-label="Insignias de la sesión">
+          ${badges.map((b) => `
+            <div class="badge-item${b.earned ? " earned" : " locked"}" role="listitem" title="${escapeHtml(b.hint)}">
+              <span class="badge-icon" aria-hidden="true">${b.icon}</span>
+              <b>${escapeHtml(b.title)}</b>
+              <span class="badge-hint">${escapeHtml(b.hint)}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
   function renderResults() {
     const summary = state.summary;
     const session = state.session;
@@ -1186,6 +1354,7 @@ const key = currentRenderKey();
     return `
       <h2>Resultados</h2>
       ${s2Notice}
+      ${renderSessionRewards(summary)}
       <div class="stat-grid">
         <div class="stat-box"><div class="value">${fmtPercent(summary.overall.accuracy)}</div><div class="label">Precisión global</div></div>
         <div class="stat-box"><div class="value">${summary.total}</div><div class="label">Preguntas respondidas</div></div>
@@ -1238,6 +1407,102 @@ const key = currentRenderKey();
     `;
   }
 
+  // ---------- pantalla: ajustes ----------
+
+  function renderSettings() {
+    const p = getPrefs();
+    let profile = null;
+    try { profile = storage.getProfile(); } catch (err) { profile = null; }
+    const loggedIn = !!currentUser();
+    if (loggedIn && !pendingAvatar) pendingAvatar = (profile && profile.avatar) || "🧪";
+    const nameValue = settingsDraftName != null ? settingsDraftName : ((profile && profile.name) || "");
+
+    const avatarBtns = AVATARS.map((a) => `<button type="button" class="avatar-btn${a === pendingAvatar ? " selected" : ""}" data-action="pick-avatar" data-avatar="${a}" aria-label="Elegir avatar ${a}">${a}</button>`).join("");
+
+    const themeRow = `
+      <div class="setting-row">
+        <div class="setting-label"><b>Tema</b><span>${p.theme === "light" ? "Modo claro activo" : "Modo oscuro activo"}</span></div>
+        ${themeButtonHtml()}
+      </div>`;
+    const fontRow = `
+      <div class="setting-row">
+        <div class="setting-label"><b>Tamaño del texto</b><span>${fontLabel(p.fontScale)}</span></div>
+        ${fontButtonHtml()}
+      </div>`;
+    const contrastRow = `
+      <div class="setting-row">
+        <div class="setting-label"><b>Alto contraste</b><span>${p.highContrast ? "Activado" : "Desactivado"}</span></div>
+        ${contrastButtonHtml()}
+      </div>`;
+
+    const profileCard = loggedIn
+      ? `
+      <div class="card">
+        <h3>Tu perfil</h3>
+        <div class="field">
+          <label>Avatar</label>
+          <div class="avatar-row" role="radiogroup" aria-label="Elegir avatar">${avatarBtns}</div>
+        </div>
+        <div class="field">
+          <label for="settings-name">Nombre</label>
+          <input type="text" id="settings-name" maxlength="16" autocomplete="nickname" placeholder="Tu nombre" value="${escapeHtml(nameValue)}">
+          <div class="field-error" id="settings-uErr"></div>
+        </div>
+        <button class="btn btn-block" data-action="save-profile">Guardar cambios</button>
+      </div>`
+      : "";
+
+    const dataCard = loggedIn ? renderDataManagementCard() : "";
+
+    return `
+      <div class="top-actions" style="justify-content:space-between; align-items:center;">
+        <button class="link-btn" data-action="settings-back">&larr; Volver</button>
+        ${loggedIn ? `<button class="link-btn" data-action="logout">Cerrar sesión</button>` : ""}
+      </div>
+      <h2>Ajustes</h2>
+      <p class="muted">${loggedIn ? "Configura tu perfil, la apariencia y tus datos." : "Ajusta la apariencia. Podrás definir tu perfil al entrar."}</p>
+
+      ${profileCard}
+
+      <div class="card">
+        <h3>Apariencia y accesibilidad</h3>
+        ${themeRow}
+        ${fontRow}
+        ${contrastRow}
+      </div>
+
+      ${dataCard}
+
+      <div class="card">
+        <h3>Acerca de</h3>
+        <p class="muted" style="margin:0;">SepsLab v1.0 · Práctica para las Pruebas Saber Pro (ICFES). Funciona sin conexión y guarda todo en este navegador.</p>
+      </div>
+    `;
+  }
+
+  function saveProfileFromSettings() {
+    const el = document.getElementById("settings-name");
+    const errEl = document.getElementById("settings-uErr");
+    const name = el ? String(el.value).trim() : "";
+    if (name.length < 2) {
+      if (errEl) errEl.textContent = "Escribe un nombre de al menos 2 letras.";
+      if (el) el.setAttribute("aria-invalid", "true");
+      return;
+    }
+    if (errEl) errEl.textContent = "";
+    if (el) el.removeAttribute("aria-invalid");
+    try {
+      storage.setProfile({ name: name, avatar: pendingAvatar, createdAt: (storage.getProfile() || {}).createdAt || new Date().toISOString() });
+      storage.setAvatar(pendingAvatar);
+      const u = storage.getCurrentUser();
+      if (u) storage.setCurrentUser(Object.assign({}, u, { user: name, avatar: pendingAvatar }));
+      storage.setRememberedUser(name);
+    } catch (err) { /* noop */ }
+    settingsDraftName = name;
+    showMessage("Perfil actualizado.");
+    render();
+  }
+
   // ---------- pantalla: progreso ----------
 
   // Serie de precisión por módulo a través de todas las sesiones guardadas, en
@@ -1247,10 +1512,6 @@ const key = currentRenderKey();
   // se borró el historial, se cambió de equipo, etc.).
   function renderDataManagementCard() {
     return `
-      <div class="card">
-        <h3>Apariencia y accesibilidad</h3>
-        <div class="row" style="margin-bottom:12px;">${controlsHtml()}</div>
-      </div>
       <div class="card">
         <h3>Tus datos</h3>
         <p class="muted">Todo vive solo en este navegador. Exporta de vez en cuando por si se borra el historial del navegador, cambias de equipo, o algo similar.</p>
@@ -1264,14 +1525,102 @@ const key = currentRenderKey();
     `;
   }
 
+  // ---------- gamificación del progreso acumulado ----------
+
+  function progressGamificationHtml(sessions) {
+    let game;
+    try { game = storage.getGame(); } catch (err) { return ""; }
+
+    const level = storage.levelForXp(game.xp);
+    const pct = (game.xp || 0) % 100;
+    const streak = game.streak || 0;
+
+    const answered = [];
+    sessions.forEach((s) => {
+      if (!s.answers) return;
+      s.answers.forEach((a) => { if (a.correct != null) answered.push(a); });
+    });
+    const totalQ = answered.length;
+    const totalCorrect = answered.filter((a) => a.correct).length;
+    const acc = totalQ ? totalCorrect / totalQ : null;
+
+    const now = Date.now();
+    const weekSessions = sessions.filter((s) => s.startedAt && now - new Date(s.startedAt).getTime() <= 7 * 86400000);
+    const GOAL = 5;
+    const weekPct = Math.min(100, Math.round((weekSessions.length / GOAL) * 100));
+
+    const perModule = {};
+    answered.forEach((a) => {
+      perModule[a.module] = perModule[a.module] || { n: 0, c: 0 };
+      perModule[a.module].n += 1;
+      if (a.correct) perModule[a.module].c += 1;
+    });
+    const medals = Object.keys(perModule).filter((m) => perModule[m].n >= 5 && perModule[m].c / perModule[m].n >= 0.8);
+
+    const avgMs = totalQ ? answered.reduce((a, x) => a + (x.timeMs || 0), 0) / totalQ : null;
+
+    const badges = [
+      { icon: "🎓", title: "Primera sesión", hint: "Completa una sesión", earned: sessions.length >= 1 },
+      { icon: "📚", title: "100 preguntas", hint: "Responde 100 preguntas", earned: totalQ >= 100 },
+      { icon: "🏅", title: "500 preguntas", hint: "Responde 500 preguntas", earned: totalQ >= 500 },
+      { icon: "🔥", title: "Constancia 3 días", hint: "Tres días seguidos", earned: streak >= 3 },
+      { icon: "💎", title: "Precisión 80%+", hint: "Promedio global de 80%", earned: acc != null && totalQ >= 20 && acc >= 0.8 },
+      { icon: "⏱️", title: "Velocidad entrenada", hint: "Promedio menor a 90 s", earned: avgMs != null && totalQ >= 20 && avgMs < 90000 },
+    ];
+    const earnedCount = badges.filter((b) => b.earned).length;
+
+    return `
+      <div class="card progress-hero">
+        <div class="progress-hero-top">
+          <div class="rewards-avatar" aria-hidden="true">${escapeHtml(pendingAvatar || "🧪")}</div>
+          <div class="rewards-info">
+            <p class="rewards-xp">Nivel ${level}</p>
+            <p class="muted rewards-sub">${game.xp || 0} puntos acumulados · 🔥 ${streak} día${streak === 1 ? "" : "s"} de constancia</p>
+            <div class="xp-bar rewards-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
+            <p class="xp-label">${pct}/100 · faltan ${100 - pct} para el Nivel ${level + 1}</p>
+          </div>
+        </div>
+        <div class="progress-stats">
+          <div class="pstat"><b>${sessions.length}</b><span>sesiones</span></div>
+          <div class="pstat"><b>${totalQ}</b><span>preguntas</span></div>
+          <div class="pstat"><b>${acc == null ? "—" : Math.round(acc * 100) + "%"}</b><span>precisión</span></div>
+          <div class="pstat"><b>${avgMs == null ? "—" : fmtMs(avgMs)}</b><span>tiempo medio</span></div>
+        </div>
+        <div class="week-goal">
+          <div class="week-head">
+            <strong>Meta de la semana</strong>
+            <span>${weekSessions.length}/${GOAL} sesiones</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:${weekPct}%; background:var(--warn)"></div></div>
+          <p class="muted week-note">${weekSessions.length >= GOAL ? "🎉 Meta cumplida. Puedes subirla la próxima semana." : `Te faltan ${GOAL - weekSessions.length} sesión${GOAL - weekSessions.length === 1 ? "" : "es"} para cumplirla.`}</p>
+        </div>
+        ${medals.length ? `<div class="medals"><strong>🏅 Módulos dominados</strong><div class="medal-chips">${medals.map((m) => `<span class="medal-chip" style="border-color:${moduleMeta(m).color}">${escapeHtml(moduleMeta(m).name)}</span>`).join("")}</div></div>` : ""}
+        <div class="badges-grid" role="list" aria-label="Insignias acumuladas">
+          ${badges.map((b) => `
+            <div class="badge-item${b.earned ? " earned" : " locked"}" role="listitem" title="${escapeHtml(b.hint)}">
+              <span class="badge-icon" aria-hidden="true">${b.icon}</span>
+              <b>${escapeHtml(b.title)}</b>
+              <span class="badge-hint">${escapeHtml(b.hint)}</span>
+            </div>
+          `).join("")}
+        </div>
+        <p class="muted" style="margin:12px 0 0; font-size:.8em;">Insignias conseguidas: ${earnedCount} de ${badges.length}.</p>
+      </div>
+    `;
+  }
+
   function renderProgress() {
     const sessions = storage.getSessions().slice().sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
 
     if (!sessions.length) {
       return `
-        <button class="link-btn" data-action="go-home">&larr; Volver</button>
+        <div class="top-actions" style="justify-content:space-between; align-items:center;">
+          <button class="link-btn" data-action="go-home">&larr; Volver</button>
+          <button class="link-btn" data-action="go-settings">Ajustes</button>
+        </div>
         <h2>Tu progreso</h2>
         <p class="muted">Todavía no hay sesiones guardadas. Completa una para empezar a ver tu evolución aquí, o importa un respaldo si ya tenías progreso.</p>
+        ${progressGamificationHtml(sessions)}
         ${renderDataManagementCard()}
       `;
     }
@@ -1326,8 +1675,12 @@ const key = currentRenderKey();
     }).join("");
 
     return `
-      <button class="link-btn" data-action="go-home">&larr; Volver</button>
+      <div class="top-actions" style="justify-content:space-between; align-items:center;">
+        <button class="link-btn" data-action="go-home">&larr; Volver</button>
+        <button class="link-btn" data-action="go-settings">Ajustes</button>
+      </div>
       <h2>Tu progreso</h2>
+      ${progressGamificationHtml(sessions)}
       <p class="muted">Precisión por módulo a lo largo de tus sesiones (más reciente a la derecha).</p>
       ${chartsHtml}
       <div class="card">
@@ -1349,23 +1702,36 @@ const key = currentRenderKey();
     const actionEl = e.target.closest("[data-action]");
     if (!actionEl) return;
     const action = actionEl.dataset.action;
-    if (action === "login-guest") { loginAsGuest(); return; }
-    else if (action === "login") { state = { screen: "login" }; render(); return; }
-    else if (action === "logout") { logout(); return; }
-    else if (action === "toggle-password") {
-      const input = document.getElementById("login-password");
-      if (!input) return;
-      const show = input.type === "password";
-      input.type = show ? "text" : "password";
-      actionEl.classList.toggle("showing", show);
-      actionEl.setAttribute("aria-pressed", String(show));
-      actionEl.setAttribute("aria-label", show ? "Ocultar contraseña" : "Mostrar contraseña");
-      input.focus();
+    if (action === "pick-avatar") {
+      pendingAvatar = actionEl.dataset.avatar || pendingAvatar;
+      document.querySelectorAll(".avatar-btn").forEach((b) => b.classList.toggle("selected", b.dataset.avatar === pendingAvatar));
       return;
     }
-    else if (action === "login-forgot") {
+    else if (action === "pick-mission") {
+      pendingStartMode = pendingStartMode === actionEl.dataset.mode ? null : actionEl.dataset.mode;
+      document.querySelectorAll(".mission-chip").forEach((b) => {
+        const on = b.dataset.mode === pendingStartMode;
+        b.classList.toggle("selected", on);
+        b.setAttribute("aria-pressed", String(on));
+      });
+      return;
+    }
+    else if (action === "login") { state = { screen: "login" }; render(); return; }
+    else if (action === "logout") { logout(); return; }
+    else if (action === "create-profile") {
+      const nameEl = document.getElementById("login-username");
       const box = document.getElementById("login-error-box");
-      if (box) { box.textContent = "Demo local: no hay servidor. Usa Explorar como invitado o ingresa con cualquier contraseña válida."; box.classList.add("show"); }
+      if (box) { box.classList.remove("show"); box.textContent = ""; }
+      clearLoginError(nameEl, "login-uErr");
+      startProfile(nameEl ? nameEl.value : "");
+      return;
+    }
+    else if (action === "resume-profile") { resumeProfile(); return; }
+    else if (action === "change-profile") {
+      try { storage.clearProfile(); } catch (err) { /* noop */ }
+      pendingStartMode = null;
+      state = { screen: "login" };
+      render();
       return;
     }
     else if (action === "toggle-theme") {
@@ -1390,7 +1756,23 @@ const key = currentRenderKey();
       render();
       return;
     }
-    else if (action === "reward-continue") { pendingReward = null; state = { screen: "home" }; render(); return; }
+    else if (action === "reward-continue") {
+      const target = pendingStartMode;
+      pendingReward = null;
+      state = { screen: "home" };
+      render();
+      if (target) startModeConfig(target);
+      return;
+    }
+    else if (action === "go-settings") {
+      if (state.screen !== "login" && state.screen !== "settings") settingsReturn = { screen: state.screen };
+      state = { screen: "settings" };
+      render();
+      return;
+    }
+    else if (action === "save-profile") { saveProfileFromSettings(); return; }
+    else if (action === "settings-back") { settingsDraftName = null; state = settingsReturn; render(); return; }
+    else if (action === "logout") { logout(); return; }
     else if (action === "go-config") startModeConfig(actionEl.dataset.mode);
     else if (action === "go-home") { state = { screen: "home" }; render(); }
     else if (action === "go-progress") { state = { screen: "progress" }; render(); }
@@ -1500,19 +1882,16 @@ const key = currentRenderKey();
       updateWordCountBadge();
     }
     if (e.target.id === "login-username") clearLoginError(e.target, "login-uErr");
-    if (e.target.id === "login-password") {
-      clearLoginError(e.target, "login-pErr");
-      const warn = document.getElementById("capsWarn");
-      if (warn && e.getModifierState) {
-        try { warn.classList.toggle("show", e.getModifierState("CapsLock")); } catch (err) { /* noop */ }
-      }
+    if (e.target.id === "settings-name") {
+      settingsDraftName = e.target.value;
+      clearLoginError(e.target, "settings-uErr");
     }
   }
 
-  function handleSubmit(e) {
-    if (e.target && e.target.id === "login-form") {
+  function handleKeydown(e) {
+    if (e.key === "Enter" && e.target && e.target.id === "login-username") {
       e.preventDefault();
-      doLogin();
+      startProfile(e.target.value);
     }
   }
 
@@ -1522,7 +1901,7 @@ const key = currentRenderKey();
     root.addEventListener("click", handleClick);
     root.addEventListener("change", handleChange);
     root.addEventListener("input", handleInput);
-    root.addEventListener("submit", handleSubmit);
+    root.addEventListener("keydown", handleKeydown);
     // Si ya había sesión guardada, entrar directo; si no, pedir login.
     try {
       state = { screen: "home" };

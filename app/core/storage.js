@@ -10,6 +10,7 @@ window.SESP.core.storage = (function () {
   const REMEMBER_KEY = "sesp_user";
   const GAME_KEY = "sesp.game.v1";
   const PREFS_KEY = "sesp.prefs.v1";
+  const PROFILE_KEY = "sesp.profile.v1";
 
   function readJSON(key, fallback) {
     try {
@@ -113,6 +114,7 @@ window.SESP.core.storage = (function () {
       reviewState: getReviewState(),
       game: getGame(),
       prefs: getPrefs(),
+      profile: getProfile(),
     };
   }
 
@@ -153,6 +155,8 @@ window.SESP.core.storage = (function () {
     }
 
     if (data.prefs && typeof data.prefs === "object") savePrefs(data.prefs);
+
+    if (data.profile && typeof data.profile === "object" && data.profile.name) setProfile(data.profile);
 
     return { sessionsCount: mergedSessions.length, reviewCount: Object.keys(existingReview).length };
   }
@@ -263,6 +267,24 @@ window.SESP.core.storage = (function () {
     return merged;
   }
 
+  // ---------- perfil del jugador (sin contraseña) ----------
+  // El perfil es lo que permite guardar el progreso: nombre + avatar elegidos una
+  // vez. Vive aparte de la sesión activa para poder retomarla tras cerrar sesión.
+  function getProfile() {
+    const p = readJSON(PROFILE_KEY, null);
+    if (!p || typeof p !== "object" || !p.name) return null;
+    return p;
+  }
+
+  function setProfile(profile) {
+    writeJSON(PROFILE_KEY, profile);
+    return profile;
+  }
+
+  function clearProfile() {
+    try { localStorage.removeItem(PROFILE_KEY); } catch (err) { /* noop */ }
+  }
+
   return {
     getSessions,
     recordSession,
@@ -273,6 +295,9 @@ window.SESP.core.storage = (function () {
     importData,
     getPrefs,
     savePrefs,
+    getProfile,
+    setProfile,
+    clearProfile,
     getCurrentUser,
     setCurrentUser,
     clearCurrentUser,

@@ -29,7 +29,7 @@ body {
 }
 
 #app {
-  max-width: 760px;
+  max-width: var(--shell);
   margin: 0 auto;
   /* env() vale 0 fuera de una pantalla con notch/barra de gestos, así que esto no
      cambia nada en escritorio. */
@@ -3672,6 +3672,222 @@ html[data-contrast="high"] .opt-mark {
   text-underline-offset: 3px;
 }
 
+/* =============================================================================
+   ESCRITORIO
+   En el navegador de escritorio la app se veía como una columna de teléfono
+   centrada en una pantalla grande: mucho margen muerto a los lados y, al mismo
+   tiempo, textos estirados de más. Aquí se reparte el ancho según lo que hace
+   cada pantalla y se aprovecha la rejilla. Los anchos salen de tokens.css.
+   ========================================================================== */
+
+/* Los gráficos de precisión son tarjetas iguales: que fluyan las que quepan, en
+   vez de una columna estrecha con el resto de la pantalla vacía. */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.charts-grid > .card {
+  margin-bottom: 0;
+}
+
+/* Cuando no hay nada que graficar, el aviso ocupa la fila completa en vez de
+   quedar encerrado en la primera columna. */
+.charts-grid > p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.charts-grid + .card {
+  margin-top: 16px;
+}
+
+@media (min-width: 1000px) {
+  /* La luz de fondo estaba calibrada para una columna de 760px y en una pantalla
+     grande se quedaba toda en una esquina. Se reparte en las dos. */
+  body {
+    background-image:
+      radial-gradient(900px 520px at 6% -8%, var(--accent-soft), transparent),
+      radial-gradient(760px 420px at 100% 104%, var(--warn-soft), transparent);
+  }
+
+  /* Un poco más de aire a los lados, para que la columna no quede pegada. */
+  #app {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  /* Las pantallas cortas y de una sola tarjeta (se acabó el tiempo) se centran en
+     la pantalla en vez de quedarse pegadas arriba, con medio monitor vacío. */
+  #app[data-screen="timeUp"] {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* Lo que se configura o se responde: una columna cómoda, sin regalar ancho de
+     más a un texto que ya se lee bien. */
+  #app[data-screen="modeConfig"],
+  #app[data-screen="results"],
+  #app[data-screen="essayResults"],
+  #app[data-screen="essay"] {
+    max-width: var(--shell-focus);
+  }
+
+  /* Lo que es rejilla o tabla sí aprovecha la pantalla. */
+  #app[data-screen="home"],
+  #app[data-screen="settings"],
+  #app[data-screen="progress"],
+  #app[data-screen="report"] {
+    max-width: var(--shell-wide);
+  }
+
+  /* El login se parte en dos columnas a partir de 880px, así que #app no puede
+     seguir midido en 800px: lo dejaba apretado contra el borde. */
+  #app[data-screen="login"] {
+    max-width: var(--shell-login);
+  }
+
+  /* Tres modos por fila. Con dos, la última fila queda con un hueco a la derecha
+     que hace que la pantalla parezca más angosta de lo que es. */
+  .mode-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* La guía de pasos y el saludo no son rejilla: son cuatro pastillas con un
+     número. Estiradas a 1120px quedan como una barra de huecos, así que se
+     quedan con el ancho de lectura aunque la pantalla sea grande. */
+  .guide-steps,
+  .guide-hello {
+    max-width: var(--shell);
+  }
+
+  /* Ajustes en dos columnas: perfil y apariencia se leen de un vistazo, en vez
+     de cuatro tarjetas apiladas que obligan a desplazarse. */
+  .settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 20px;
+    align-items: start;
+  }
+
+  /* Tablas con muchas columnas (historial, informe) tienen cabecera fija: al
+     desplazarse de lado no se pierde de vista qué es cada dato. */
+  .table-scroll th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+    z-index: 1;
+  }
+}
+
+/* Preguntas: entre 1000 y 1179px todavía no hay ancho para dos columnas, así que
+   se mantiene una sola con la medida acotada para que la línea no se estire. */
+@media (min-width: 1000px) and (max-width: 1179px) {
+  #app[data-screen="question"],
+  #app[data-screen="flaggedReview"] {
+    max-width: var(--measure-wide);
+  }
+
+  #app[data-screen="question"] .quest-progress,
+  #app[data-screen="question"] .timer-bar,
+  #app[data-screen="question"] .countdown-track,
+  #app[data-screen="question"] .q-read,
+  #app[data-screen="question"] .q-answers,
+  #app[data-screen="flaggedReview"] .quest-progress,
+  #app[data-screen="flaggedReview"] .timer-bar,
+  #app[data-screen="flaggedReview"] .countdown-track,
+  #app[data-screen="flaggedReview"] .q-read,
+  #app[data-screen="flaggedReview"] .q-answers {
+    max-width: var(--measure);
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* A partir de aquí el pasaje y las opciones van lado a lado, como el examen en
+   papel. Es el único arreglo que de verdad aprovecha una pantalla grande: con las
+   dos columnas a la vista no hay que leer el texto, bajar hasta el final y volver
+   arriba para marcar la respuesta. */
+@media (min-width: 1180px) {
+  #app[data-screen="question"],
+  #app[data-screen="flaggedReview"] {
+    max-width: var(--shell-split);
+  }
+
+  .q-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+    gap: 32px;
+    align-items: start;
+  }
+
+  /* min-width: 0 permite que la rejilla encoja las columnas cuando el pasaje
+     trae una tabla o una gráfica anchas. */
+  .q-read,
+  .q-answers {
+    min-width: 0;
+  }
+
+  .q-read .context-box {
+    margin-bottom: 20px;
+  }
+
+  .q-read .prompt {
+    margin-bottom: 0;
+  }
+
+  /* El reloj queda fijo arriba. Con un pasaje largo se iba fuera de pantalla, y
+     en Exprés y Simulacro el tiempo que no se ve es el que corre. */
+  #app[data-screen="question"] .timer-bar,
+  #app[data-screen="flaggedReview"] .timer-bar,
+  #app[data-screen="essay"] .timer-bar {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 10px var(--shadow-soft);
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+
+  /* El botón de "Siguiente" también se queda pegado al borde inferior: es la
+     acción que se repite en cada pregunta y no debería haber que bajar a buscarla
+     después de leer un pasaje largo. */
+  #app[data-screen="question"] .btn-block[data-action="next-question"],
+  #app[data-screen="question"] .btn-block[data-action="finish-session"],
+  #app[data-screen="flaggedReview"] .btn-block[data-action="review-next"],
+  #app[data-screen="flaggedReview"] .btn-block[data-action="finish-session"] {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    box-shadow: 0 -2px 14px var(--shadow-soft);
+  }
+}
+
+/* Boton de "Informe para el docente": en el móvil ocupa el ancho, como los demás
+   botones de acción, pero en escritorio estirado a 1120px parecía una barra
+   luminosa en vez de un botón. */
+.report-cta {
+  display: block;
+  width: 100%;
+  margin: 8px 0 20px;
+}
+
+@media (min-width: 1000px) {
+  .report-cta {
+    width: fit-content;
+    min-width: 280px;
+    margin: 8px auto 20px;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
 /* ---------- Avatares en SVG ---------- */
 .avatar-glyph {
   display: grid;
@@ -3692,18 +3908,18 @@ html[data-contrast="high"] .opt-mark {
 
 /* Cada avatar con su color, en vez del color de texto: seis siluetas iguales
    del mismo tono nosrvían para distinguirlas de un vistazo. */
-[data-avatar="lab"] { color: var(--av-lab); }
-[data-avatar="rocket"] { color: var(--av-rocket); }
-[data-avatar="brain"] { color: var(--av-brain); }
-[data-avatar="bolt"] { color: var(--av-bolt); }
-[data-avatar="target"] { color: var(--av-target); }
-[data-avatar="bot"] { color: var(--av-bot); }
+[data-av="lab"] { color: var(--av-lab); }
+[data-av="rocket"] { color: var(--av-rocket); }
+[data-av="brain"] { color: var(--av-brain); }
+[data-av="bolt"] { color: var(--av-bolt); }
+[data-av="target"] { color: var(--av-target); }
+[data-av="bot"] { color: var(--av-bot); }
 
 /* La insignia del nivel y la de recompensas van sobre el degradado del acento,
    así que ahí el icono se queda en blanco: un tinte propio sobre cyan (modo
    oscuro) o violeta (modo claro) competiría con el fondo. */
-.avatar-badge [data-avatar],
-.rewards-avatar [data-avatar] {
+.avatar-badge [data-av],
+.rewards-avatar [data-av] {
   color: var(--on-accent);
 }
 

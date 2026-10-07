@@ -7,7 +7,7 @@
 //
 // IMPORTANTE — al cambiar cualquier archivo de app/, hay que subir CACHE aquí:
 // si no, los usuarios con la app instalada seguirían viendo la versión vieja.
-const CACHE = "sesp-v2";
+const CACHE = "sesp-v3";
 
 const SHELL = [
   "./",

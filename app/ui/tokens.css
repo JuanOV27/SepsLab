@@ -63,6 +63,20 @@
   --av-bolt: #FCD34D;
   --av-target: #4ADE80;
   --av-bot: #93C5FD;
+
+  /* Anchos del contenido. En el móvil se queda en una columna de 760px, que es lo
+     que siempre dio bien. El escritorio ensancha lo que es rejilla (inicio,
+     ajustes, progreso) y deja estrecho lo que se lee (preguntas y resultados).
+     --measure es la medida de lectura: una línea de texto no se mide en píxeles
+     sino en caracteres, y a 1400px de ancho el ojo tiene que volver del extremo
+     izquierdo al derecho en cada línea. */
+  --shell: 760px;
+  --shell-wide: 1120px;
+  --shell-focus: 900px;
+  --shell-login: 1040px;
+  --shell-split: 1280px;
+  --measure: 68ch;
+  --measure-wide: 780px;
 }
 
 /* ---------- Tema claro ---------- */
@@ -123,4 +137,13 @@ html[data-theme="light"] {
   --av-bolt: #9C4A05;
   --av-target: #12662F;
   --av-bot: #1D4ED8;
+
+  /* Mismos anchos que en el oscuro: dependen del ancho de la pantalla, no del tema. */
+  --shell: 760px;
+  --shell-wide: 1120px;
+  --shell-focus: 900px;
+  --shell-login: 1040px;
+  --shell-split: 1280px;
+  --measure: 68ch;
+  --measure-wide: 780px;
 }

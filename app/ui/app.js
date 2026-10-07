@@ -27,7 +27,7 @@ let state = { screen: "home" };
 
   // El avatar se guarda como emoji (clave estable en localStorage) pero se dibuja
   // con un SVG propio: los botones de la app usan SVG y los emoji se veían de otro
-  // tipo. Cada uno lleva un data-avatar para que el CSS le dé su color (--av-* en
+  // tipo. Cada uno lleva un data-av para que el CSS le dé su color (--av-* en
   // tokens.css); si el valor no está en el mapa, se cae al emoji como texto plano.
   const AVATARS = ["🧪", "🚀", "🧠", "⚡", "🎯", "👾"];
   const AVATAR_ICONS = {
@@ -42,7 +42,7 @@ let state = { screen: "home" };
   function avatarHtml(value) {
     const entry = AVATAR_ICONS[value || "🧪"];
     if (!entry) return escapeHtml(value || "🧪");
-    return `<span class="avatar-glyph" data-avatar="${entry[0]}" aria-hidden="true">${entry[1]}</span>`;
+    return `<span class="avatar-glyph" data-av="${entry[0]}" aria-hidden="true">${entry[1]}</span>`;
   }
   const DAILY_TIPS = [
     "Lea la pregunta completa antes de revisar las opciones de respuesta.",
@@ -277,6 +277,9 @@ let spotTimer = null;
     stopSpotlight();
     stopLoginTip();
     if (!root) return;
+    // La pantalla se marca en el contenedor porque cada una pide un ancho distinto
+    // en escritorio: leer un pasaje y elegir un módulo no usan el mismo.
+    root.setAttribute("data-screen", state.screen || "");
     const key = currentRenderKey();
     const changed = key !== lastRenderKey;
     lastRenderKey = key;
@@ -716,7 +719,7 @@ let spotTimer = null;
           <span class="mode-ico" aria-hidden="true">🎯</span><h3>Entrenamiento</h3>
           <p class="muted">${modesApi.training.countFor("Todas")} preguntas nuevas con explicación resuelta. No son del ICFES.</p>
         </button>
-        <button class="mode-card anim-in" style="--d:.43s; grid-column:1/-1;" data-action="go-config" data-mode="simulacro2">
+        <button class="mode-card anim-in" style="--d:.43s" data-action="go-config" data-mode="simulacro2">
           <span class="mode-ico" aria-hidden="true">📝</span><h3>Simulacro 2026-2</h3>
           <p class="muted">Practica el simulacro interno 2026-2 con cronómetro por pregunta.</p>
         </button>
@@ -1138,12 +1141,18 @@ let spotTimer = null;
         ${totalTimerHtml}
       </div>
       <div class="countdown-track" aria-hidden="true"><div class="countdown-fill fast" id="countdown-fill" style="width:100%"></div></div>
-      ${context ? renderContext(context) : ""}
-      <p class="prompt">${escapeHtml(q.prompt)}</p>
-      ${q.id && q.id.indexOf("S2-") === 0 ? `<p class="muted" style="font-size:.8em;">Simulacro 2026-2 · pregunta ${q.source && q.source.originalNumber != null ? q.source.originalNumber : ""} · clave derivada por el equipo, pendiente de verificación oficial.</p>` : ""}
-      <div class="options">${optionsHtml}</div>
-      ${feedbackHtml}
-      ${nextButtonHtml}
+      <div class="q-split">
+      <div class="q-read">
+        ${context ? renderContext(context) : ""}
+        <p class="prompt">${escapeHtml(q.prompt)}</p>
+        ${q.id && q.id.indexOf("S2-") === 0 ? `<p class="muted" style="font-size:.8em;">Simulacro 2026-2 · pregunta ${q.source && q.source.originalNumber != null ? q.source.originalNumber : ""} · clave derivada por el equipo, pendiente de verificación oficial.</p>` : ""}
+      </div>
+      <div class="q-answers">
+        <div class="options">${optionsHtml}</div>
+        ${feedbackHtml}
+        ${nextButtonHtml}
+      </div>
+      </div>
     `;
   }
 
@@ -1280,11 +1289,17 @@ let spotTimer = null;
         <span class="timer-chip fast" id="question-timer">&#9203; --:--</span>
       </div>
       <div class="countdown-track" aria-hidden="true"><div class="countdown-fill fast" id="countdown-fill" style="width:100%"></div></div>
-      ${context ? renderContext(context) : ""}
-      <p class="prompt">${escapeHtml(q.prompt)}</p>
-      <div class="options">${optionsHtml}</div>
-      ${feedbackHtml}
-      ${nextHtml}
+      <div class="q-split">
+        <div class="q-read">
+          ${context ? renderContext(context) : ""}
+          <p class="prompt">${escapeHtml(q.prompt)}</p>
+        </div>
+        <div class="q-answers">
+          <div class="options">${optionsHtml}</div>
+          ${feedbackHtml}
+          ${nextHtml}
+        </div>
+      </div>
     `;
   }
 
@@ -1604,20 +1619,22 @@ let spotTimer = null;
       <h2>Ajustes</h2>
       <p class="muted">${loggedIn ? "Configura tu perfil, la apariencia y tus datos." : "Ajusta la apariencia. Podrás definir tu perfil al entrar."}</p>
 
-      ${profileCard}
+      <div class="settings-grid">
+        ${profileCard}
 
-      <div class="card">
-        <h3>Apariencia y accesibilidad</h3>
-        ${themeRow}
-        ${fontRow}
-        ${contrastRow}
-      </div>
+        <div class="card">
+          <h3>Apariencia y accesibilidad</h3>
+          ${themeRow}
+          ${fontRow}
+          ${contrastRow}
+        </div>
 
-      ${dataCard}
+        ${dataCard}
 
-      <div class="card">
-        <h3>Acerca de</h3>
-        <p class="muted" style="margin:0;">SepsLab v1.0 · Práctica para las Pruebas Saber Pro (ICFES). Funciona sin conexión y guarda todo en este navegador.</p>
+        <div class="card">
+          <h3>Acerca de</h3>
+          <p class="muted" style="margin:0;">SepsLab v1.0 · Práctica para las Pruebas Saber Pro (ICFES). Funciona sin conexión y guarda todo en este navegador.</p>
+        </div>
       </div>
     `;
   }
@@ -1863,7 +1880,7 @@ let spotTimer = null;
         <h2>Tu progreso</h2>
         <p class="muted">Todavía no hay sesiones guardadas. Completa una para empezar a ver tu evolución aquí, o importa un respaldo si ya tenías progreso.</p>
         ${progressGamificationHtml(sessions)}
-        <button class="btn btn-block no-print" data-action="go-report">Informe para el docente</button>
+        <button class="btn report-cta no-print" data-action="go-report">Informe para el docente</button>
         ${renderDataManagementCard()}
       `;
     }
@@ -1925,7 +1942,7 @@ let spotTimer = null;
       <h2>Tu progreso</h2>
       ${progressGamificationHtml(sessions)}
       <p class="muted">Precisión por módulo a lo largo de tus sesiones (más reciente a la derecha).</p>
-      ${chartsHtml}
+      <div class="charts-grid">${chartsHtml}</div>
       <div class="card">
         <h3>Historial de sesiones</h3>
         <div style="overflow-x:auto;">
@@ -1936,7 +1953,7 @@ let spotTimer = null;
         </div>
       </div>
       ${renderDataManagementCard()}
-      <button class="btn btn-block no-print" data-action="go-report" style="margin-top:4px;">Informe para el docente</button>
+      <button class="btn report-cta no-print" data-action="go-report">Informe para el docente</button>
     `;
   }
 

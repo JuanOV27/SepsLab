@@ -3717,10 +3717,46 @@ html[data-contrast="high"] .opt-mark {
 }
 
 @media (min-width: 1000px) {
-  /* Un poco más de aire a los lados, para que la columna no quede pegada. */
+/* Un poco más de aire a los lados, para que la columna no quede pegada. */
   #app {
     padding-left: 24px;
     padding-right: 24px;
+  }
+
+  /* Escalones de título más presentes: a 1120px de ancho los títulos se quedaban
+     con tamaño de columna de teléfono y la pantalla perdía jerarquía. */
+  #app[data-screen="home"] .home-brand h1 { font-size: 2.3em; }
+  #app[data-screen="home"] h3,
+  #app[data-screen="settings"] h3,
+  #app[data-screen="progress"] h3,
+  #app[data-screen="report"] h2 { font-size: 1.15em; }
+  #app[data-screen="settings"] > h2,
+  #app[data-screen="progress"] > h2 { font-size: 1.8em; }
+
+  /* Tarjetas con más presencia. En el móvil se deja la sombra corta: en un
+     teléfono una sombra larga se ve como una mancha bajo el borde. */
+  .card,
+  .game-hud,
+  .progress-hero {
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Las cifras no deben bailar cuando cambian: el cronómetro ya usaba
+     tabular-nums y las estadísticas no. */
+  .stat-box .value,
+  .pstat b,
+  .medal-chip,
+  .quest-progress span {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* El contador del tiempo se pega a la barra para que se lean como una sola
+     pieza, y no como dos elementos sueltos con un hueco en medio. */
+  #app[data-screen="question"] .countdown-track,
+  #app[data-screen="flaggedReview"] .countdown-track,
+  #app[data-screen="essay"] .countdown-track {
+    margin-top: -12px;
+    margin-bottom: 12px;
   }
 
   /* Las pantallas cortas y de una sola tarjeta (se acabó el tiempo) se centran en
@@ -3891,6 +3927,142 @@ html[data-contrast="high"] .opt-mark {
     padding-left: 32px;
     padding-right: 32px;
   }
+}
+
+/* Iconos de los modos y de los botones: mismo trazo y mismo tamaño que el resto,
+   para que no se note de dónde viene cada uno. */
+.mode-ico {
+  display: inline-grid;
+  place-items: center;
+  width: 2em;
+  height: 2em;
+  color: var(--accent);
+}
+
+.mode-ico svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mode-card:hover .mode-ico {
+  color: var(--accent-hover);
+}
+
+.btn-ico {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: -0.15em;
+  margin-left: 2px;
+}
+
+.btn-ico svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---------- Foco de teclado ----------
+   Antes solo lo tenían .btn, .option, los campos y los select. Las tarjetas de
+   modo son la llamada a la acción principal de la app y, sin anillo de foco,
+   recorrerla con el teclado no mostraba dónde estabas. */
+.mode-card:focus-visible,
+.link-btn:focus-visible,
+.chip-btn:focus-visible,
+.mission-chip:focus-visible,
+.avatar-btn:focus-visible,
+.count-pill:focus-visible,
+.theme-btn:focus-visible,
+.font-btn:focus-visible,
+.resume-banner:focus-visible,
+.stat-box:focus-visible,
+.setting-row button:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ---------- Burbujas: decoración, no contenido ----------
+   Son catorce círculos que suben por la pantalla. Sobre un pasaje compiten con
+   las letras, así que se apagan en las pantallas de lectura y en el resultado.
+   En el inicio, los ajustes y el progreso siguen teniendo vida al fondo. */
+body[data-screen="question"] .bubbles,
+body[data-screen="flaggedReview"] .bubbles,
+body[data-screen="essay"] .bubbles,
+body[data-screen="results"] .bubbles,
+body[data-screen="essayResults"] .bubbles,
+body[data-screen="report"] .bubbles {
+  display: none;
+}
+
+/* ---------- Inicio a dos columnas en escritorio ----------
+   El HUD ocupaba una fila entera de 1120px con tres números y dejaba media
+   pantalla vacía al lado del grid de modos. */
+.home-grid,
+.home-main {
+  display: contents;
+}
+
+@media (min-width: 1000px) {
+  .home-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 0 28px;
+    align-items: start;
+  }
+
+  .home-grid .home-hud {
+    grid-column: 2;
+    grid-row: 1;
+    margin-bottom: 0;
+  }
+
+  .home-grid .home-main {
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  /* Sin tarjeta de perfil no hay nada que poner en la segunda columna: se
+     colapsa para no dejar 300px muertos, y los modos vuelven a tres por fila. */
+  .home-grid.is-single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-grid.is-single .mode-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* "Nivel 4" no puede partirse en dos líneas: el chip es corto y el espacio
+     junto a él lo tiene la racha. */
+  .level-badge,
+  .count-pill {
+    white-space: nowrap;
+  }
+
+  /* Con la tarjeta de perfil al lado, las tarjetas de modo quedan más angostas:
+     con tres por fila el texto se partía en tres líneas. */
+  .home-grid .mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.hud-next {
+  margin: 8px 0 0;
+  font-size: 0.82em;
+  color: var(--text-dim);
+}
+
+.hud-next b {
+  color: var(--text);
+}
+
+.hud-next.muted {
+  color: var(--text-dim);
+}
+
+.hud-next.muted b {
+  color: var(--accent);
 }
 
 /* ---------- Avatares en SVG ---------- */

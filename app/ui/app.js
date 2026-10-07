@@ -44,6 +44,27 @@ let state = { screen: "home" };
     if (!entry) return escapeHtml(value || "🧪");
     return `<span class="avatar-glyph" data-av="${entry[0]}" aria-hidden="true">${entry[1]}</span>`;
   }
+
+  // Iconos de los modos, en el mismo trazo que los avatares y los botones. Antes
+  // eran emoji: se veían de otro tipo y su color no seguía a la paleta.
+  const MODE_ICONS = {
+    practice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6.8S10 5.2 6 5.2H3.2v13H6c4 0 6 1.6 6 1.6s2-1.6 6-1.6h2.8v-13H18c-4 0-6 1.6-6 1.6z"/><path d="M12 6.8v13"/></svg>',
+    simulation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.4" r="7.6"/><path d="M12 9.8v3.6l2.4 1.8M9.2 2.6h5.6M12 2.6v3.2"/></svg>',
+    review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 12a8.2 8.2 0 1 1-2.4-5.8"/><path d="M20.2 3.6v4.2H16"/></svg>',
+    express: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.4"/><path d="M12 6.8V12l3.4 2.2"/></svg>',
+    training: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r="1"/></svg>',
+    simulacro2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.2H7.4A2.2 2.2 0 0 0 5.2 5.4v13.2a2.2 2.2 0 0 0 2.2 2.2h9.2a2.2 2.2 0 0 0 2.2-2.2V8z"/><path d="M14 3.2V8h4.8"/><circle cx="12" cy="14.4" r="2.8"/><path d="M12 12.9v1.5l1.4.9"/></svg>',
+  };
+
+  function modeIconHtml(modeId) {
+    return `<span class="mode-ico" aria-hidden="true">${MODE_ICONS[modeId] || ""}</span>`;
+  }
+
+  const CHART_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M8 16.5v-4M12.5 16.5v-8M17 16.5v-6"/></svg>';
+
+  function chartIconHtml() {
+    return `<span class="btn-ico" aria-hidden="true">${CHART_ICON}</span>`;
+  }
   const DAILY_TIPS = [
     "Lea la pregunta completa antes de revisar las opciones de respuesta.",
     "Descarte primero la opción evidentemente incorrecta.",
@@ -280,6 +301,9 @@ let spotTimer = null;
     // La pantalla se marca en el contenedor porque cada una pide un ancho distinto
     // en escritorio: leer un pasaje y elegir un módulo no usan el mismo.
     root.setAttribute("data-screen", state.screen || "");
+    // El body también lo necesita: las burbujas decorativas viven fuera de #app y
+    // sobre un pasaje compiten con el texto, así que se apagan al leer.
+    if (document.body) document.body.setAttribute("data-screen", state.screen || "");
     const key = currentRenderKey();
     const changed = key !== lastRenderKey;
     lastRenderKey = key;
@@ -664,12 +688,18 @@ let spotTimer = null;
       if (user) {
         const level = storage.levelForXp(g.xp);
         const pct = ((g.xp || 0) % 100);
+        // En escritorio esta tarjeta vive en una columna propia, así que lleva el
+        // siguiente paso: en la fila completa quedaba sola con tres números.
+        const nextStep = dueCount > 0
+          ? `<p class="hud-next"><b>${dueCount}</b> pregunta${dueCount === 1 ? "" : "s"} pendiente${dueCount === 1 ? "" : "s"} de repaso</p>`
+          : `<p class="hud-next muted">Sin pendientes de repaso. Empieza por <b>Práctica libre</b>.</p>`;
         homeGame = `
         <div class="card game-hud home-hud">
           <div class="avatar-badge">${avatarHtml(avatar)}</div>
           <div class="game-info">
             <div class="game-top"><span class="level-badge">Nivel ${level}</span><span class="streak">Constancia: ${g.streak || 0} días · ${g.xp || 0} puntos</span></div>
             <div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div>
+            ${nextStep}
           </div>
         </div>`;
       }
@@ -683,8 +713,10 @@ let spotTimer = null;
           ? `<button class="link-btn" data-action="logout">Cerrar sesión</button>`
           : `<button class="link-btn" data-action="login">Iniciar sesión</button>`}</span>
       </div>
-      ${homeGame}
-      ${user ? "" : `<p class="muted" style="margin:-8px 0 12px;">Crear una cuenta guarda aquí tu avatar, tus puntos y tu racha de días. No hace falta para practicar.</p>`}
+      <div class="home-grid${homeGame ? "" : " is-single"}">
+        ${homeGame}
+        <div class="home-main">
+      ${user ? "" : `<p class="muted home-note">Crear una cuenta guarda aquí tu avatar, tus puntos y tu racha de días. No hace falta para practicar.</p>`}
       <div class="home-brand">
         <img src="assets/images/logo.png" alt="Logo SepsLab" onerror="this.style.display='none'">
         <div><h1 style="margin:0;">SepsLab — Práctica Saber Pro</h1></div>
@@ -700,34 +732,36 @@ let spotTimer = null;
       ${dueCount > 0 ? `<button class="resume-banner anim-in" style="--d:.1s" data-action="go-config" data-mode="review"><span>🔁 Tienes <strong>${dueCount} pendiente${dueCount === 1 ? "" : "s"}</strong> de repaso — retoma donde quedaste →</span></button>` : ""}
       <div class="mode-grid">
         <button class="mode-card anim-in" style="--d:.15s" data-action="go-config" data-mode="practice">
-          <span class="mode-ico" aria-hidden="true">📚</span><h3>Práctica libre</h3>
+          ${modeIconHtml("practice")}<h3>Práctica libre</h3>
           <p class="muted">Un módulo (y competencia opcional), sin presión de tiempo.</p>
         </button>
         <button class="mode-card anim-in" style="--d:.22s" data-action="go-config" data-mode="simulation">
-          <span class="mode-ico" aria-hidden="true">⏱️</span><h3>Simulacro</h3>
+          ${modeIconHtml("simulation")}<h3>Simulacro</h3>
           <p class="muted">Un módulo completo al ritmo objetivo del examen, sin pausas.</p>
         </button>
         <button class="mode-card anim-in" style="--d:.29s" data-action="go-config" data-mode="review">
-          <span class="mode-ico" aria-hidden="true">🔁</span><h3>Repaso ${dueCount > 0 ? `<span class="count-pill">${dueCount}</span>` : ""}</h3>
+          ${modeIconHtml("review")}<h3>Repaso ${dueCount > 0 ? `<span class="count-pill">${dueCount}</span>` : ""}</h3>
           <p class="muted">${dueCount} pregunta${dueCount === 1 ? "" : "s"} pendiente${dueCount === 1 ? "" : "s"} de repasar.</p>
         </button>
         <button class="mode-card anim-in" style="--d:.36s" data-action="go-config" data-mode="express">
-          <span class="mode-ico" aria-hidden="true">⚡</span><h3>Modo Exprés</h3>
+          ${modeIconHtml("express")}<h3>Modo Exprés</h3>
           <p class="muted">Sesión de duración fija: 15, 30 o 60 minutos.</p>
         </button>
         <button class="mode-card anim-in" style="--d:.4s" data-action="go-config" data-mode="training">
-          <span class="mode-ico" aria-hidden="true">🎯</span><h3>Entrenamiento</h3>
+          ${modeIconHtml("training")}<h3>Entrenamiento</h3>
           <p class="muted">${modesApi.training.countFor("Todas")} preguntas nuevas con explicación resuelta. No son del ICFES.</p>
         </button>
         <button class="mode-card anim-in" style="--d:.43s" data-action="go-config" data-mode="simulacro2">
-          <span class="mode-ico" aria-hidden="true">📝</span><h3>Simulacro 2026-2</h3>
+          ${modeIconHtml("simulacro2")}<h3>Simulacro 2026-2</h3>
           <p class="muted">Practica el simulacro interno 2026-2 con cronómetro por pregunta.</p>
         </button>
       </div>
-      <button class="btn btn-secondary btn-block anim-in" data-action="go-progress" style="margin-top:16px; --d:.43s;">Ver mi progreso 📊</button>
+      <button class="btn btn-secondary btn-block anim-in" data-action="go-progress" style="margin-top:16px; --d:.43s;">Ver mi progreso ${chartIconHtml()}</button>
       <p class="muted" style="margin-top:12px;">
         ${sessionsCount} sesión${sessionsCount === 1 ? "" : "es"} guardada${sessionsCount === 1 ? "" : "s"} en este navegador.
       </p>
+        </div>
+      </div>
     `;
   }
 
@@ -1878,7 +1912,8 @@ let spotTimer = null;
           <button class="link-btn" data-action="go-settings">Ajustes</button>
         </div>
         <h2>Tu progreso</h2>
-        <p class="muted">Todavía no hay sesiones guardadas. Completa una para empezar a ver tu evolución aquí, o importa un respaldo si ya tenías progreso.</p>
+        <p class="muted">Todavía no hay sesiones guardadas. Cuando completes una, aquí verás tu precisión por módulo y cómo mejora con el tiempo.</p>
+        <button class="btn anim-in" data-action="go-config" data-mode="practice">Empezar a practicar</button>
         ${progressGamificationHtml(sessions)}
         <button class="btn report-cta no-print" data-action="go-report">Informe para el docente</button>
         ${renderDataManagementCard()}

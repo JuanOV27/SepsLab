@@ -46,6 +46,9 @@
   --ring-warn: rgba(224, 164, 58, 0.35);
   --shadow: rgba(0, 0, 0, 0.45);
   --shadow-soft: rgba(0, 0, 0, 0.35);
+  /* Sombra de las tarjetas. En escritorio, con las columnas separadas por 28px,
+     una sombra de 3px no bastaba para distinguir dos superficies vecinas. */
+  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.28), 0 10px 26px rgba(0, 0, 0, 0.22);
   --overlay: rgba(0, 0, 0, 0.6);
   --bubble-accent: rgba(43, 179, 206, 0.5);
   --bubble-warn: rgba(224, 164, 58, 0.45);
@@ -111,6 +114,8 @@ html[data-theme="light"] {
   --ring-warn: rgba(138, 90, 6, 0.3);
   --shadow: rgba(45, 18, 62, 0.4);
   --shadow-soft: rgba(76, 29, 102, 0.14);
+  /* El fondo claro ya est\u00e1 lavado de color: la tarjeta blanca necesita algo m\u00e1s que un borde de 1px para despegarse. */
+  --shadow-card: 0 1px 2px rgba(76, 29, 102, 0.06), 0 8px 20px rgba(76, 29, 102, 0.07);
   --overlay: rgba(45, 18, 62, 0.45);
   --bubble-accent: rgba(107, 33, 182, 0.45);
   --bubble-warn: rgba(138, 90, 6, 0.4);

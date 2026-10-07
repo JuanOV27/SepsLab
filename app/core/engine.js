@@ -19,10 +19,56 @@ window.SESP.core.engine = (function () {
       questions: config.questions.slice(),
       currentIndex: 0,
       answers: [],
+      // "Marcar y volver": en los modos cronometrados el estudiante puede dejar
+      // una pregunta en pausa y responderla al final, igual que en el examen real.
+      marked: {},
+      markedOrder: [],
       startedAt: null,
       endedAt: null,
       currentQuestionStartedAt: null,
     };
+  }
+
+  // --- marcar / desmarcar ---
+
+  function isMarked(session, questionId) {
+    return !!(session.marked && session.marked[questionId]);
+  }
+
+  function getMarkedQuestions(session) {
+    const order = session.markedOrder || [];
+    return order
+      .map((id) => session.questions.find((q) => q.id === id))
+      .filter(Boolean);
+  }
+
+  function markQuestion(session, questionId) {
+    if (!questionId) return session;
+    if (!session.marked) { session.marked = {}; session.markedOrder = []; }
+    if (session.marked[questionId]) return session;
+    session.marked[questionId] = true;
+    session.markedOrder.push(questionId);
+    return session;
+  }
+
+  function unmarkQuestion(session, questionId) {
+    if (!session.marked || !session.marked[questionId]) return session;
+    delete session.marked[questionId];
+    session.markedOrder = (session.markedOrder || []).filter((id) => id !== questionId);
+    return session;
+  }
+
+  function toggleMark(session, questionId) {
+    return isMarked(session, questionId) ? unmarkQuestion(session, questionId) : markQuestion(session, questionId);
+  }
+
+  // Salta a una pregunta concreta sin alterar el cronómetro por pregunta: se usa
+  // para volver a las marcadas en la revisión final.
+  function goToIndex(session, index) {
+    if (index < 0 || index >= session.questions.length) return session;
+    session.currentIndex = index;
+    session.currentQuestionStartedAt = Date.now();
+    return session;
   }
 
   function start(session) {
@@ -62,13 +108,16 @@ window.SESP.core.engine = (function () {
     const isScored = question.kind === "single-select";
     const targetMs = session.moduleTimers[question.module] != null ? session.moduleTimers[question.module] : null;
 
+    // Si la pregunta aún no tiene clave (correctOption null), no se califica:
+    // se registra tiempo y respuesta, pero correct queda null (igual que CE).
+    const scorable = isScored && question.correctOption != null;
     const answer = {
       questionId: question.id,
       module: question.module,
       competencia: question.competencia || null,
       kind: question.kind,
       selectedOption: selectedOption,
-      correct: isScored ? selectedOption === question.correctOption : null,
+      correct: scorable ? selectedOption === question.correctOption : null,
       timeMs: timeMs,
       targetMs: targetMs,
       answeredAt: new Date(now).toISOString(),
@@ -237,6 +286,12 @@ window.SESP.core.engine = (function () {
     hasMoreQuestions,
     isTimeUp,
     finish,
+    isMarked,
+    markQuestion,
+    unmarkQuestion,
+    toggleMark,
+    getMarkedQuestions,
+    goToIndex,
     shuffle,
     buildModuleTimers,
     findQuestionById,

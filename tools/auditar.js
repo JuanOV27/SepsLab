@@ -52,6 +52,10 @@ const ARCHIVOS = [
   "data/questions.ds.js", "data/questions.pc.js",
   "data/questions.gen.rc.js", "data/questions.gen.lc.js", "data/questions.gen.cc.js",
   "data/questions.gen.in.js", "data/questions.gen.ce.js",
+  // El banco del Simulacro 2026-2 no viene del ICFES: es un simulacro del
+  // docente. Se carga igual para que pase por las mismas comprobaciones de
+  // coherencia, y además por las suyas (bloque 3).
+  "data/questions.s2.js",
   "data/explanations.js",
 ];
 
@@ -70,6 +74,10 @@ const D = sandbox.window.SESP.data;
 
 const problemas = [];
 const avisos = [];
+
+// Preguntas del Simulacro 2026-2 (del docente, no del ICFES). Se definen aquí
+// porque hacen falta en varios bloques de más abajo.
+const esS2 = (q) => String(q.id || "").startsWith("S2-");
 
 // --------------------------------------------------------------------------------------
 // 1. Claves contra los PDF oficiales.
@@ -108,7 +116,10 @@ for (const { banco, q } of todas) {
   if (!q.id) { problemas.push(`${banco}: pregunta sin id`); continue; }
   if (vistas.has(q.id)) problemas.push(`id duplicado: ${q.id}`);
   vistas.set(q.id, q);
-  if (!q.id.startsWith(banco + "-")) problemas.push(`${q.id}: el prefijo no coincide con el banco ${banco}`);
+  // S2-CE-01 vive en el banco CE (es un ensayo, y los ensayos se guardan ahí),
+  // pero su id lleva el prefijo del simulacro del que viene. Se acepta.
+  const bancoEsperado = esS2(q) ? q.id.split("-")[0] : banco;
+  if (!q.id.startsWith(bancoEsperado + "-")) problemas.push(`${q.id}: el prefijo no coincide con el banco ${banco}`);
 
   if (q.kind === "essay") {
     if (!q.prompt || !q.prompt.trim()) problemas.push(`${q.id}: ensayo sin enunciado`);
@@ -158,8 +169,23 @@ for (const { q } of todas) {
   if (!q.contextId && duenas.length) problemas.push(`${q.id}: sin contextId pero figura en ${duenas.join(", ")}`);
 }
 
+// Hay imágenes que se pintan desde el código y no desde un contexto de pregunta: el
+// logo de la pantalla de inicio y del login. Sin esto, logo.png salía como "imagen en
+// disco que ningún contexto referencia", que es un aviso falso. Ojo: esto tiene que
+// ir ANTES del bucle de abajo, que es el que comprueba que cada imagen exista.
+for (const archivo of ["ui/app.js", "index.html", "ui/styles.css"]) {
+  const ruta = path.join(APP, archivo);
+  if (!fs.existsSync(ruta)) continue;
+  const codigo = fs.readFileSync(ruta, "utf8");
+  for (const m of codigo.matchAll(/(?:assets\/images\/|\.\.\/images\/|images\/)([\w.-]+\.png)/g)) {
+    imagenes.push("assets/images/" + m[1]);
+  }
+}
+
 // Imágenes referenciadas vs. imágenes en disco.
-for (const src of imagenes) {
+// Se recorre el conjunto sin repetir: el mismo logo puede estar citado en app.js y
+// en index.html, y reportarlo dos veces hace ruido.
+for (const src of new Set(imagenes)) {
   const p = path.join(APP, src);
   if (!fs.existsSync(p)) problemas.push(`imagen inexistente: ${src}`);
   else if (fs.statSync(p).size < 1000) problemas.push(`imagen sospechosamente pequeña: ${src}`);
@@ -167,28 +193,101 @@ for (const src of imagenes) {
 const enDisco = fs.existsSync(path.join(APP, "assets/images"))
   ? fs.readdirSync(path.join(APP, "assets/images")).filter((f) => f.endsWith(".png"))
   : [];
-const sinReferenciar = enDisco.filter((f) => !imagenes.some((s) => s.endsWith(f)));
+// Los iconos de la PWA los referencia manifest.json, no un contexto de pregunta.
+const manifest = path.join(APP, "manifest.json");
+if (fs.existsSync(manifest)) {
+  const m = JSON.parse(fs.readFileSync(manifest, "utf8"));
+  (m.icons || []).forEach((ic) => imagenes.push(ic.src));
+}
+// Una misma imagen puede estar referenciada desde varios sitios (un contexto y el
+// manifest, o el logo desde el código y desde el HTML): se cuenta una sola vez.
+const imagenesUnicas = [...new Set(imagenes)];
+const sinReferenciar = enDisco.filter((f) => !imagenesUnicas.some((src) => src.endsWith(f)));
 sinReferenciar.forEach((f) => avisos.push(`imagen en disco que ningún contexto referencia: ${f}`));
 
 // Explicaciones: cobertura de las preguntas de opción múltiple, sin huérfanas.
+// El banco S2 es la excepción, y a propósito: sus claves todavía no están
+// verificadas por el docente, así que redactar la explicación ahora serviría
+// para dar por buena una clave que puede cambiar. Sale como aviso, no como fallo,
+// pero queda escrito en la salida de la auditoría para que no se pierda.
 const explicaciones = D.explanations || {};
 const conExplicacion = (q) => q.explanation || explicaciones[q.id];
+let s2SinExplicacion = 0;
 for (const { q } of todas) {
   if (q.kind === "essay") continue; // los ensayos se califican con rúbrica, no con explicación
-  if (!conExplicacion(q)) problemas.push(`${q.id}: sin explicación`);
+  if (!conExplicacion(q)) {
+    if (esS2(q)) { s2SinExplicacion++; continue; }
+    problemas.push(`${q.id}: sin explicación`);
+  }
   else if (String(conExplicacion(q)).length < 120) avisos.push(`${q.id}: explicación muy corta`);
 }
 for (const id of Object.keys(explicaciones)) {
   if (!vistas.has(id)) problemas.push(`explicación sin pregunta que la use: ${id}`);
 }
 
-// --------------------------------------------------------------------------------------
-// Resumen.
-// --------------------------------------------------------------------------------------
+// Totales del bloque 2.
 const oficiales = todas.filter(({ q }) => !q.generated).length;
 const generadas = todas.length - oficiales;
 console.log(`   ${oficiales} preguntas oficiales + ${generadas} del banco propio = ${todas.length}`);
-console.log(`   ${imagenes.length} imágenes referenciadas, ${enDisco.length} en disco`);
+console.log(`   ${imagenesUnicas.length} imágenes referenciadas, ${enDisco.length} en disco`);
+
+// --------------------------------------------------------------------------------------
+// 3. El banco del Simulacro 2026-2.
+// --------------------------------------------------------------------------------------
+// No hay tabla oficial contra la que comparar (el documento del que salió no
+// trae clave), así que aquí no se comprueba que las claves sean "correctas": se
+// comprueba que estén marcadas como provisionales, que apunten a una opción que
+// exista, y que el estudiante REALLY se entere de que son provisionales.
+console.log("\n3) Banco del Simulacro 2026-2 (claves provisionales)");
+const s2 = todas.filter(({ q }) => esS2(q));
+if (s2.length) {
+  let provisionales = 0;
+  let sinDeclarar = [];
+  const reparto = new Map();
+  for (const { q } of s2) {
+    if (q.keyStatus === "derived") provisionales++;
+    else if (q.kind === "essay") { /* los ensayos no llevan clave */ }
+    else sinDeclarar.push(q.id);
+    if (q.correctOption) reparto.set(q.correctOption, (reparto.get(q.correctOption) || 0) + 1);
+    // Que correctOption sea una opción de verdad ya lo comprueba el bloque 2.
+  }
+  const conClave = s2.filter(({ q }) => q.correctOption).length;
+  console.log(`   ${s2.length} preguntas, ${provisionales} con clave derivada (pendiente del docente), ${conClave - provisionales} sin clave`);
+
+  if (sinDeclarar.length) {
+    // Una clave sin marcar sería el peor caso: parecería oficial sin serlo.
+    sinDeclarar.forEach((id) => problemas.push(`${id}: clave sin keyStatus "derived" (parecería oficial y no lo está)`));
+  }
+
+  // Reparto desigual de claves: no es un error, pero en un examen real se nota,
+  // y un estudiante que sospeche puede acertar sin leer. Se avisa para que el
+  // docente lo mire cuando revise.
+  const total = [...reparto.values()].reduce((a, b) => a + b, 0);
+  if (total) {
+    const cuotas = [...reparto.entries()].map(([k, n]) => `${k}:${n}`).join(" ");
+    const ideal = total / 4;
+    const peor = Math.max(...reparto.values());
+    console.log(`   reparto de claves: ${cuotas} (ideal ${ideal.toFixed(1)} cada una)`);
+    if (peor > ideal * 1.6) avisos.push(`S2: las claves están muy concentradas (${cuotas}). Repartiría mejor: un estudiante que sospeche puede acertar sin leer.`);
+  }
+
+  // Lo importante: que el estudiante vea el aviso. Si algún día se quita el
+  // rótulo de "pendiente de verificación", la app estaría afirmando algo que
+  // nadie ha comprobado.
+  const app = fs.readFileSync(path.join(APP, "ui/app.js"), "utf8");
+  if (!/S2-/.test(app) || !/pendiente de verificaci/i.test(app)) {
+    problemas.push("S2: la app no avisa al estudiante de que las claves están pendientes de verificación");
+  } else {
+    console.log("   la app avisa al estudiante de que la clave está pendiente de verificación: sí");
+  }
+  if (s2SinExplicacion) {
+    avisos.push(`S2: ${s2SinExplicacion} preguntas sin explicación (se escribirán cuando el docente verifique las claves)`);
+  }
+}
+
+// --------------------------------------------------------------------------------------
+// Resumen.
+// --------------------------------------------------------------------------------------
 if (avisos.length) {
   console.log("\nAvisos (no bloquean):");
   avisos.forEach((a) => console.log("   · " + a));

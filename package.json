@@ -1,0 +1,32 @@
+{
+  "name": "sesp",
+  "version": "1.0.0",
+  "description": "Practica para el examen Saber Pro (Colombia). App web estatica, empaquetable como PWA y como APK con Capacitor.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "auditar": "node tools/auditar.js && node tools/auditar-ui.js",
+    "servidor": "python3 -m http.server 8420 --directory app",
+    "sync": "cap sync android",
+    "apk": "cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JuanOV27/SepsLab.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/JuanOV27/SepsLab/issues"
+  },
+  "homepage": "https://github.com/JuanOV27/SepsLab#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2"
+  }
+}

@@ -72,6 +72,8 @@ SESP/
       simulation.js           simulacro cronometrado al ritmo real del examen
       review.js                repaso de preguntas falladas o respondidas lento
       express.js               modo exprés: sesión de duración fija (15/30/60 min), mezcla de áreas o filtrada a una sola
+      training.js              modo entrenamiento: único que usa el banco propio (no oficial)
+    manifest.json              PWA: instalable desde el navegador del teléfono
     ui/
       styles.css
       app.js                  render de pantallas: inicio, pregunta, dashboard de resultados
@@ -83,7 +85,12 @@ SESP/
                              sirven para volver a transcribir o recortar imágenes; no se redistribuyen
   tools/
     auditar.js                verificación de claves contra las tablas oficiales del ICFES +
-                             coherencia interna de los bancos (node tools/auditar.js)
+                             coherencia interna de los bancos (npm run auditar)
+  package.json               solo para las herramientas de empaquetado, NO para la app:
+                             la app sigue siendo HTML/CSS/JS sin build
+  capacitor.config.json      configuración de Capacitor (webDir: app)
+  android/                   proyecto nativo de Capacitor (ignora los artefactos y los
+                             assets web copiados; se generan con `npm run sync`)
 ```
 
 ## Sistema de medición de velocidad (el foco principal del pedido)
@@ -262,3 +269,205 @@ Las 125 preguntas de opción múltiple del banco de entrenamiento se repartieron
 
 Quedó en `tools/auditar.js` (Node, sin dependencias, se corre con `node tools/auditar.js`) un chequeo en dos bloques repetible en cualquier momento. El primero transcribe las tablas de respuestas oficiales de los siete cuadernillos y las compara posición por posición con `correctOption`; el segundo revisa la coherencia interna de todos los bancos: ids únicos y con prefijo coherente con su banco, `correctOption` dentro de las opciones, número de opciones que el examen real usa en cada módulo, competencia registrada en `modules.js`, `contextId` resoluble y coherente con `appliesTo`, imágenes referenciadas que existen en disco y explicaciones presentes, sin huérfanas ni sospechosamente cortas. Sale con código 1 si algo falla.
 Resultado actual: **0 discrepancias de clave en 171 preguntas y 0 fallos estructurales en los 303 ítems del proyecto** (173 oficiales + 130 del banco propio). Se comprobó que el script detecta de verdad los errores que dice detectar, mutando a propósito una clave, una competencia y una explicación.
+
+## Ronda 6: versión móvil (rama `phone-version`)
+
+El objetivo declarado era usar la app en el teléfono. La app web ya funcionaba en un navegador móvil, pero eso no es lo mismo que "funcionar con el dedo": se auditó a 320, 360 y 414 px de ancho, con pantalla táctil, sobre las pantallas reales de la app.
+
+### Empaquetado (ya montado en la rama)
+
+Dos vías, ambas sobre los mismos archivos de `app/`:
+
+- **PWA**: `app/manifest.json` + iconos 192/512 y `<link rel="manifest">`. No hay service worker a propósito: durante las pruebas un caché agresivo sirvió código viejo tras cada cambio, y esta app no necesita funcionar sin conexión (los datos son locales, pero el código cambia seguido).
+- **APK de Android con Capacitor 8**: proyecto nativo en `android/`, `webDir: app` (no hay paso de build porque la app es HTML/CSS/JS puro).
+
+Flujo: `npm run sync` copia `app/` a `android/app/src/main/assets/public/` y actualiza los plugins; `npm run apk` hace el sync y luego `./gradlew assembleDebug`. El APK sale en `android/app/build/outputs/apk/debug/` (6 MB) y se instala con `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`.
+
+**Hace falta un JDK 21** (el proyecto nativo lo fija: `sourceCompatibility JavaVersion.VERSION_21`). En esta máquina no había ninguno y no hay sudo sin contraseña, así que se instaló uno portable, sin tocar el sistema:
+
+```
+curl -sL -o jdk.tar.gz "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse"
+tar xzf jdk.tar.gz -C ~/tools          # queda en ~/tools/jdk-21.0.12.1+1
+export JAVA_HOME="$HOME/tools/jdk-21.0.12.1+1"
+export ANDROID_HOME="$HOME/Android/Sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
+npm run apk
+```
+
+El SDK de Android sí estaba en `~/Android/Sdk` (platform 36, build-tools 36). `npm run auditar`, `npm run servidor` y `npx cap sync` no necesitan nada de esto: solo el APK.
+
+### Bugs reales encontrados y corregidos en el móvil
+
+1. **La página se desplazaba de lado al leer una pregunta.** Dos causas distintas, y la segunda no era ninguna tabla:
+   - Las tablas de los cuadernillos tienen hasta 7 columnas y no caben en 320 px. Ahora cada tabla va en un contenedor con scroll propio (`.table-scroll`), con la primera columna fija (`position: sticky`) para no perder de vista el nombre de la fila al desplazar. La página ya no se desplaza, solo la tabla.
+   - Una palabra larga que no se puede cortar por espacios —la URL de origen de la gráfica de inversión, en el contexto `RC-2018-CTX-04`— desbordaba 537 px. No lo detectaba ningún elemento porque el desbordamiento venía de un nodo de texto, no de una caja: se resolvió con `overflow-wrap: break-word` en `body`.
+2. **Al pasar de pregunta se perdía el lugar.** `render()` reemplaza el HTML completo pero no volvía arriba: se leía un pasaje largo hasta el final, se pulsaba "Siguiente" y la pregunta siguiente aparecía a media pantalla. Ahora se vuelve arriba solo cuando cambian la pantalla o la pregunta, nunca en el re-render que pinta el feedback (si no, saltaría mientras se lee la explicación).
+3. **Botones demasiado pequeños para el dedo**: "Terminar sesión", "← Volver" y "Borrar historial" medían 27 px de alto; ahora 44 px, el mínimo recomendado.
+4. **Los desplegables parecían campos de texto**: `appearance: none` quita la flecha nativa, que además es invisible en modo oscuro. Se dibujó una flecha propia en CSS y el selector del sistema sigue siendo el nativo al tocarlo.
+5. **Zoom no deseado del navegador**: `textarea` a 0.95 em (≈15 px) hace que iOS acerque el zoom al enfocar. En móvil los campos van a 16 px.
+6. **El área de escritura del ensayo de CE** quedaba en cinco líneas con el teclado abierto; ahora con `min-height: 40vh`.
+7. **Exportar progreso no hacía nada dentro del APK.** En el WebView de Android una descarga de un blob no tiene dónde aparecer, así que el botón fallaba en silencio. Ahora, cuando detecta el puente de Capacitor, muestra el JSON en un cuadro de texto para copiarlo; en el navegador sigue descargando el `.json` como antes. Importar sí funciona (el `<input type="file">` abre el selector del sistema).
+8. **Crash en el ensayo de CE** que salió al implementar el punto 2: la sesión de ensayo no tiene cola de preguntas y la nueva clave de render la consultaba. Se detecta antes de preguntar.
+
+También: `viewport-fit=cover` (sin él, `env(safe-area-inset-*)` vale 0 y el contenido queda bajo la barra de gestos del notch), `text-size-adjust: 100%`, `touch-action: manipulation`, cronómetro pegado arriba al desplazar un pasaje largo, botones de acción principal a ancho completo, modal con scroll, hoja única de reglas `@media (max-width: 480px)` (antes había tres bloques dispersos) y una segunda para landscape.
+
+### Un problema más que solo aparece en el teléfono real
+
+Con el APK instalado y tocado en el dispositivo salió un fallo que en el emulador no se notaba: al responder una pregunta, el "Correcto/Incorrecto" y el botón "Siguiente" quedan por debajo del borde inferior, porque las cuatro opciones ocupan casi toda la pantalla. Lo único que cambia es el color de la opción, así que la app parece no haber arrancado y no hay ninguna señal de cuál es el siguiente paso. Ahora, al responder, el bloque con el veredicto y el botón se trae a la vista (centrado si cabe; si no, con su parte alta bajo el cronómetro fijo). Solo en móvil: en escritorio el salto distraería y no hace falta. Cuidado con un detalle al implementarlo: "Terminar sesión" de la barra superior también es `data-action="finish-session"`, así que el botón de avanzar es el **último** de los dos; si se coge el primero, el cálculo cree que ya está todo a la vista y no se mueve nada.
+
+### Verificación
+
+Auditoría de maquetación con navegador real a 320, 360 y 414 px: cero scroll horizontal (recorriendo los 303 ítems del proyecto y las 64 pantallas/conjuntos de datos), cero controles por debajo de 32 px, cero errores JS. Los flujos de CE (planeación → escritura → resultados con rúbrica), de Exprés con tiempo agotado, el de progreso con sus modales y el horizontal también se probaron en pantalla táctil. En escritorio (1280 px) se verificó que las tablas siguen entrando sin scroll y que nada cambió de aspecto.
+
+Sobre el teléfono de verdad (TECNO KJ5, Android 13, 720×1612 px): APK compilado e instalado, y probados con el dedo el arranque, el menú de Exprés, el avance entre preguntas, el cronómetro que queda fijo al desplazar, las imágenes de los cuadernillos, los desplegables con su flecha y el desplazamiento lateral de una tabla (la primera columna se queda fija mientras se arrastra). El ajuste del feedback descrito arriba se confirmó en el dispositivo, no solo en el emulador.
+
+`npm run auditar` (la verificación de datos de la ronda 5) sigue pasando sin fallos: los cambios de esta ronda son de presentación y no tocaron ni una clave ni un enunciado.
+
+---
+
+## Ronda 7 — Integrar el trabajo del colaborador
+
+### Por qué una rama aparte y no un "fast forward"
+
+La rama `feature/simulacro-2026-2` de un colaborador sale de `63bd380`, que es la
+punta exacta de `main`, y llega en **un solo commit**. Fusionarla sobre `main`
+sería técnicamente un `fast-forward` sin conflictos, y eso es justo el problema:
+`main` es el estado con la auditoría pasando, y sería sustituido de golpe, sin
+revisión. Pero el trabajo móvil (`phone-version`) también sale de `63bd380`, así
+que la decisión real era de tres.
+
+Se integró en `integracion-2026-2`: las dos ramas encima de `main`, y sobre eso
+los arreglos. El cruce fue de **4 bloques de conflicto en 3 archivos**:
+
+| Archivo | Conflicto | Cómo se resolvió |
+|---|---|---|
+| `index.html` | `viewport-fit` + manifest frente a fuente e icono | Se conservan ambos |
+| `ui/app.js` | Su carrusel frente a mi clave de render | Se conservan ambos |
+| `ui/styles.css` | Su bloque de login frente a mi bloque móvil | Son consecutivos: van seguidos |
+
+En `styles.css` su lado terminó sin cerrar el `@media (min-width: 1024px)`: el
+corte de git dejó el corchete fuera. Antes de dar por buena la resolución se
+contaron las llaves (483 abren, 483 cierran) y se comparó con el final original de
+cada rama.
+
+### Lo que sí estaba bien y se quedó
+
+Su CSS es **96 % aditivo** (1935 líneas nuevas, 38 eliminadas): no tiró la base,
+la amplió. La accesibilidad es trabajo de verdad: 8 bloques
+`prefers-reduced-motion`, modo claro, alto contraste, tamaño de texto y unos 30
+atributos ARIA, con `aria-invalid` en los campos del login y `role="alert"` en el
+resumen de errores. Y una honestidad que conviene decir en voz alta: sus 44
+claves están marcadas `keyStatus: "derived"` y la app le dice al estudiante, en la
+pantalla de cada pregunta, que la clave está *pendiente de verificación oficial*.
+
+El "recorrido guiado en 4 pasos con módulo obligatorio" del mensaje de commit
+asusta más de lo que es: no es un modal que haya que completar, son cuatro
+pastillas decorativas (1 Elige un modo, 2 Configura, 3 Responde, 4 Revisa). No
+hay ninguna puerta que cruzar.
+
+### Los cuatro arreglos
+
+**1. El login deja de ser puerta.** Antes, sin sesión en el navegador, `render()`
+mandaba a la pantalla de ingreso. Como la sesión es local, eso ponía un
+obstáculo delante de cada estudiante para nada: el propio código admite
+`cualquier credencial válida entra. Sin servidor`. Ahora se abre directo a la
+práctica y la cuenta se pide desde el inicio, con un enlace. Al destaparlo
+aparecieron **dos puertas más** que se habían pasado: volver al inicio y el
+cierre de la sesión de ensayo elegían entre `home` y `login` según hubiera
+cuenta. Y la barra de nivel solo se pinta con sesión, porque los puntos se dan al
+entrar y sin cuenta se quedaría en cero para siempre.
+
+**2. Los 130 px de desborde lateral.** Los adornos de fondo del login (los orbes
+difuminados) miden 380 px y se cuelgan por fuera del borde, pensados para
+pantalla ancha; en un teléfono de 360 empujaban la página 130 px de lado y se veía
+el borde de un círculo de luz. Se probaron cinco arreglo y el resultado fue el
+contrario de lo que se suponía:
+
+| Arreglo | Desborde |
+|---|---|
+| nada | 130 px |
+| `html { overflow-x: clip }` | 130 px |
+| `html { overflow-x: hidden }` | 130 px |
+| `body { overflow-x: clip }` | **0 px** |
+| `#app { overflow-x: clip }` | **0 px** |
+
+Ni `html` ni `body` alcanzan a los adornos. Se quedó `#app`, y con `clip` y no
+`hidden` porque `hidden` convierte el elemento en contenedor de desplazamiento y
+el cronómetro pegado arriba dejaría de pegarse. Comprobado: sigue en
+`position: sticky` y con `top: 0` tras bajar 500 px.
+
+**3. La fuente, sin red.** El diseño carga Nunito desde Google Fonts, y `main`
+no tenía ninguna dependencia externa. Se autoaloja en `app/assets/fonts/`: solo
+los subconjuntos latin y latin-ext, que es lo que necesita el español (325 KB), con
+la licencia OFL al lado. Así se conserva el diseño y la app arranca sin conexión,
+que es justo cuando más se usa.
+
+**4. La auditoría mira el banco nuevo.** Este era el hueco más serio: `tools/auditar.js`
+no sabía qué era `s2`, así que sus 45 preguntas **no pasaban por ninguna
+comprobación** y el total se quedaba en 303. Ahora hay un bloque 3 que, como el
+documento del que salieron no trae clave oficial, no comprueba si las claves son
+"correctas" sino lo que sí es comprobable: que estén marcadas como provisionales,
+que no se repitan de más y que la app avise al estudiante. El total sube a 348.
+
+También se calló un aviso falso: `logo.png` salía como "imagen que ningún contexto
+referencia" cuando sí se usa, porque se pinta desde el código. Ahora se buscan
+también las referencias en `ui/app.js`, `index.html` y `styles.css`.
+
+### Lo que queda pendiente, a propósito
+
+- **Las 44 preguntas de S2 no tienen explicación.** Es lo único que la app enseña
+  con detalle, y es justo lo que falta. Sale como aviso, no como fallo, y
+  deliberadamente: sus claves las resolvió el equipo y el docente todavía no las
+  verifica, así que escribir la explicación ahora daría por buena una clave que
+  puede cambiar. Se escriben después de la revisión.
+- **Las claves están concentradas**: C:18, B:17, A:4, D:5, cuando lo repartido
+  serían 11 y 11. Puede ser que el simulacro fuera así de verdad, pero conviene
+  mirarlo cuando el docente revise.
+- **El APK sigue siendo de depuración**, sin firmar, así que Android lo marca como
+  app no verificada. Publicarlo en Play Store exige una clave propia.
+
+### Verificación
+
+`npm run auditar` pasa. En navegador, a 320/360/414/768/1280 px: cero scroll
+horizontal, cero errores JS, el cronómetro sigue pegado al desplazar, la tabla del
+escritorio entra sin scroll (734 px en un contenedor de 800) y el módulo nuevo
+responde con su cuenta regresiva.
+
+Sobre el teléfono de verdad (TECNO KJ5, Android 13): APK de 6,6 MB compilado,
+instalado y tocado. Se comprobó con el dedo que arrastrar la pantalla hacia los
+lados **no mueve la página** (que era el fallo), que se entra directo a la práctica
+sin cuenta, que "Simulacro 2026-2" arranca, que la cuenta regresiva por pregunta
+corre, que el rótulo de clave provisional aparece bajo el enunciado y que al
+responder el veredicto y el botón Siguiente quedan a la vista.
+### Exprés también puede usar el banco del simulacro 2026-2
+
+No hizo falta tocar la estructura de Exprés, porque ya tenía dónde encajar: su
+segundo eje, `sources`, es exactamente "de dónde salen las preguntas". Así que el
+simulacro entró como **tercer origen**, junto a "oficial" y "generado", y no como
+un modo aparte ni como una bandera nueva.
+
+Con eso, en Exprés se puede marcar la fuente del simulacro sola (las 44
+preguntas de opción múltiple), combinada con la oficial (144 preguntas mezclando
+cuadernillos y simulacro) o con la de entrenamiento.
+
+Dos cosas que salieron al hacerlo y que no eran obvias:
+
+- **El tema de ensayo del simulacro se colaba como oficial.** `S2-CE-01` está
+  guardado dentro del banco `questions.CE`, y el código de Exprés tomaba ese banco
+  entero cuando la fuente era "oficial". O sea que un alumno podía caer en el tema
+  del simulacro sin haber marcado su fuente, y la app lo habría presentado como
+  un tema de 2018. Ahora se separa por prefijo y solo entra si la fuente del
+  simulacro está marcada. Comprobado: con 40 sesiones de ensayo solo "oficial" no
+  salió ninguna del simulacro; con "simulacro2" sale `S2-CE-01`.
+- **El simulacro solo tiene RC, LC, CC e IN.** Se puede marcar Exprés con las siete
+  áreas y la fuente del simulacro, pero FP/DS/PC no aportarían nada. La pantalla de
+  configuración lo dice antes de empezar en vez de dejar que se descubra jugando,
+  y si la combinación se queda sin preguntas el botón "Comenzar" queda deshabilitado
+  en vez de fallar al arrancar.
+
+El rótulo de "clave derivada por el equipo, pendiente de verificación oficial" que
+ya ponía el módulo Simulacro 2026-2 en cada pregunta se aplicaba por id (`S2-`), así
+que también sale en Exprés sin cambiar nada. En la pantalla de configuración se
+añade además el recordatorio, porque ahí es donde se decide si se quiere practicar
+con material sin verificar.
+

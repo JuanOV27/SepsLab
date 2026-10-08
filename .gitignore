@@ -11,3 +11,6 @@ node_modules/
 # Salidas de build
 build/
 dist/
+
+# Ajustes locales de Android Studio (no son del proyecto)
+android/.idea/

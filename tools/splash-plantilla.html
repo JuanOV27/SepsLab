@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Plantilla del splash nativo de Android</title>
+<!--
+  Para regenerar las imagenes del splash tras cambiar la marca:
+  1. Abrir este archivo desde tools/ para comprobar que se ve bien.
+  2. Capturar con el navegador sin interfaz, a las medidas de cada densidad,
+     y copiar el resultado sobre android/app/src/main/res/<carpeta>/splash.png.
+  Carpetas y medidas: drawable-port-mdpi 320x480, port-hdpi 480x800, port-xhdpi 720x1280,
+  port-xxhdpi 960x1600, port-xxxhdpi 1280x1920, y las land-* con las medidas invertidas.
+  El bloque se escala con min(vw, vh) para que la composicion sea siempre la misma.
+-->
+<link rel="stylesheet" href="../app/ui/fonts.css">
+<style>
+  /* Réplica exacta del splash del navegador (app/ui/styles.css, .splash), para
+     renderizar la imagen nativa de Android. El bloque se escala con min(vw,vh)
+     para conservar las proporciones en cualquier resolución de pantalla. */
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #17101F;
+    background-image:
+      radial-gradient(520px 320px at 50% 38%, rgba(147, 51, 234, 0.22), transparent),
+      radial-gradient(420px 260px at 78% 82%, rgba(224, 164, 58, 0.14), transparent);
+    overflow: hidden;
+  }
+  .stage {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 390px; height: 844px;
+    transform: translate(-50%, -50%) scale(var(--s, 1));
+    transform-origin: center center;
+    font-family: "Nunito", system-ui, sans-serif;
+    color: #F4F1F7;
+    text-align: center;
+  }
+  .inner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 0 24px; }
+  .logo {
+    width: 148px; height: 148px;
+    object-fit: contain;
+    margin: 0 auto 18px;
+    filter: drop-shadow(0 10px 30px rgba(147, 51, 234, 0.55));
+  }
+  .title { margin: 0; font-size: 1.42rem; font-weight: 600; letter-spacing: 0.01em; color: #B4A7C4; }
+  .title strong {
+    display: block; font-size: 1.9rem; font-weight: 800;
+    letter-spacing: -0.02em; color: #F4F1F7;
+  }
+  .sub {
+    margin: 6px 0 0; font-size: 0.82em;
+    letter-spacing: 0.06em; text-transform: uppercase; color: #E0A43A;
+    white-space: nowrap;
+  }
+  /* La barra no puede animarse en una imagen estática: se dibuja completa, con el
+     mismo degradado acento -> aviso que usa la del navegador. */
+  .bar {
+    position: absolute; left: 50%; bottom: 46px;
+    width: 148px; height: 2px; transform: translateX(-50%);
+    background: linear-gradient(90deg, #2BB3CE, #E0A43A);
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="inner">
+      <img class="logo" src="../app/assets/images/logo.png" alt="">
+      <p class="title">Bienvenido a <strong>SepsLab</strong></p>
+      <p class="sub">Práctica para las Pruebas Saber Pro</p>
+    </div>
+    <div class="bar"></div>
+  </div>
+  <script>
+    // Escala el escenario para que la composición sea idéntica a la del navegador en
+    // cualquier tamaño de pantalla que se vaya a generar.
+    (function () {
+      function ajustar() {
+        var s = Math.min(window.innerWidth / 390, window.innerHeight / 844);
+        document.getElementById("stage").style.setProperty("--s", s);
+      }
+      ajustar();
+      window.addEventListener("resize", ajustar);
+      document.addEventListener("DOMContentLoaded", ajustar);
+    })();
+  </script>
+</body>
+</html>

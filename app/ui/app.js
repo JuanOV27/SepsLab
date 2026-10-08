@@ -20,6 +20,11 @@ let state = { screen: "home" };
   let pendingReward = null;
   let pendingStartMode = null;
   let sessionRewarded = false;
+  // Lo mismo para guardar la sesión: hay seis botones que la cierran, y un doble
+  // toque (o Enter repetido con el botón enfocado) llamaba dos veces a finish(),
+  // que escribe una copia nueva cada vez. Con esta bandera la segunda llamada no
+  // vuelve a escribir nada.
+  let sessionRecorded = false;
   let settingsDraftName = null;
   let settingsReturn = { screen: "home" };
   let answerStreak = 0;
@@ -656,6 +661,9 @@ let spotTimer = null;
     };
     if (!overlay) { go(); return; }
     const r = reward;
+    // Si el premio de hoy ya se recogió, no se anuncia nada: bastaría con ir al
+    // inicio. La racha se muestra igual, que es lo que le importa ver.
+    if (r.alreadyToday) { go(); return; }
     overlay.innerHTML = `
       <div class="reward-card" role="dialog" aria-label="Constancia registrada">
         <div class="reward-avatar">${avatarHtml(r.game && r.game.avatar)}</div>
@@ -1025,6 +1033,7 @@ let spotTimer = null;
       state.lastAnswer = null;
       answerStreak = 0;
       sessionRewarded = false;
+      sessionRecorded = false;
       state.screen = session.kind === "essay" ? "essay" : "question";
       render();
     } catch (err) {
@@ -1243,6 +1252,14 @@ let spotTimer = null;
     render();
   }
 
+  // Cierra la sesión y la guarda. Si ya estaba guardada, no vuelve a escribirla:
+    // el resumen que se está mostrando sigue siendo válido y no hay nada que rehacer.
+    function recordSessionOnce() {
+      if (sessionRecorded) return;
+      sessionRecorded = true;
+      return modesApi[state.modeId].finish(state.session);
+    }
+
   function finishSession() {
     // "Marcar y volver": si quedo alguna pregunta marcada y todavia hay tiempo, se
     // ofrece la revision final antes de cerrar. Si el tiempo ya se acabo, no cabe.
@@ -1250,7 +1267,7 @@ let spotTimer = null;
     const inReview = state.screen === "flaggedReview";
     const canReview = !inReview && session && session.questions && (state.modeId === "express" || state.modeId === "simulation");
     const timeUp = canReview && session.totalTimeLimitMs != null && engine.isTimeUp(session);
-    if (canReview && !timeUp && engine.getMarkedQuestions(session).length) {
+    if (canReview && !timeUp && !sessionRecorded && engine.getMarkedQuestions(session).length) {
       // La cola guarda posiciones, no ids: el motor responde sobre la pregunta que
       // está en currentIndex, así que hay que dejar el puntero ahí antes de pintar
       // (y no dentro de render, que se llama en cada respuesta y reiniciaría el reloj).
@@ -1263,7 +1280,7 @@ let spotTimer = null;
       render();
       return;
     }
-    state.summary = modesApi[state.modeId].finish(state.session);
+    state.summary = recordSessionOnce() || state.summary;
     state.screen = "results";
     render();
   }
@@ -1275,9 +1292,13 @@ let spotTimer = null;
     const idx = (state.reviewQueue || [])[state.reviewIndex];
     const q = idx == null ? null : session.questions[idx];
     if (!q) {
-      state.summary = modesApi[state.modeId].finish(state.session);
+      // La cola se agotó (no debería pasar: reviewNext ya salta a resultados).
+      // Antes de hecho, este return render() llamaba a render() desde dentro de
+      // render(): si algo fallaba antes de cambiar state.screen, la pantalla se
+      // quedaba igual y la recursion no terminaba. Ahora se sale sin dibujar.
+      state.summary = recordSessionOnce() || state.summary;
       state.screen = "results";
-      return render();
+      return "";
     }
     const meta = moduleMeta(q.module);
     const context = findContext(q);
@@ -1397,7 +1418,12 @@ let spotTimer = null;
   }
 
   function essayFinish() {
-    state.summary = modesApi[state.modeId].finishEssay(state.session);
+    // Misma protección que finishSession: terminar el ensayo dos veces no debe
+    // dejar dos registros de la misma sesión.
+    if (!sessionRecorded) {
+      sessionRecorded = true;
+      state.summary = modesApi[state.modeId].finishEssay(state.session);
+    }
     state.screen = "essayResults";
     render();
   }
@@ -2257,7 +2283,9 @@ function esSesionEnsayo(s) {
     root.addEventListener("change", handleChange);
     root.addEventListener("input", handleInput);
     root.addEventListener("keydown", handleKeydown);
-    // Si ya había sesión guardada, entrar directo; si no, pedir login.
+    // El login es opcional: se abre directo a la práctica y la cuenta solo se pide
+    // si alguien la quiere, para tener avatar, XP y racha. No hay ninguna pantalla
+    // que exija sesión, y por eso no puede haber un bucle de redirección al login.
     try {
       state = { screen: "home" };
     } catch (err) {

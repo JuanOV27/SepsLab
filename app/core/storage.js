@@ -97,6 +97,13 @@ window.SESP.core.storage = (function () {
   // Guarda una sesión terminada y actualiza la cola de repaso a partir de sus respuestas.
   function recordSession(session) {
     const sessions = getSessions();
+    // Red de seguridad: si la misma sesión llega dos veces (un doble toque al
+    // terminar, o dos caminos de código que cierran), se ignora la segunda. La
+    // interfaz ya tiene su propia guarda; esto protege los datos aunque alguien
+    // añada otra vía de cierre sin acordarse de ella.
+    if (session && session.startedAt && sessions.some((s) => s && s.startedAt === session.startedAt)) {
+      return session;
+    }
     sessions.push(session);
     writeJSON(SESSIONS_KEY, sessions);
 
@@ -261,13 +268,17 @@ window.SESP.core.storage = (function () {
     return saveGame(g);
   }
 
+  // Día en formato YYYY-MM-DD **en hora local**. Con toISOString() el día cambiaba
+  // a las 19:00 en Colombia (UTC-5): quien estudiaba de noche y al día siguiente
+  // temprano a la mañana contaba como el mismo día y su racha no avanzaba.
   function todayStr(d) {
-    const d2 = d || new Date();
-    return d2.toISOString().slice(0, 10);
+    const x = d || new Date();
+    return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0");
   }
 
   // Premio por entrar: +25 XP base, +5 por día de racha (tope +50).
-  // Re-entrar el mismo día solo da +5 y no rompe la racha.
+  // Entrar dos veces el mismo día no da nada: si no, cerrar y volver a iniciar
+  // sesión era una forma de farmear XP ilimitada.
   function awardLogin() {
     const g = getGame();
     const today = todayStr();
@@ -275,7 +286,7 @@ window.SESP.core.storage = (function () {
     const beforeLevel = levelForXp(g.xp);
     let gained = 0;
     if (g.lastLoginDate === today) {
-      gained = 5;
+      gained = 0;
     } else if (g.lastLoginDate === yesterday) {
       g.streak += 1;
       gained = 25 + Math.min(g.streak * 5, 50);
@@ -288,7 +299,7 @@ window.SESP.core.storage = (function () {
     g.lastLoginDate = today;
     saveGame(g);
     const afterLevel = levelForXp(g.xp);
-    return { game: g, gained, leveledUp: afterLevel > beforeLevel, level: afterLevel };
+    return { game: g, gained, leveledUp: afterLevel > beforeLevel, level: afterLevel, alreadyToday: gained === 0 };
   }
 
   // ---------- preferencias de accesibilidad y tema ----------

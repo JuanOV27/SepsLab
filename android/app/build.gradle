@@ -19,7 +19,11 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // proguard-android.txt ya no sirve: incluye -dontoptimize, que le
+            // quita a R8 muchas optimizaciones. Android Gradle Plugin lo rechaza
+            // al evaluar el proyecto. El equivalente correcto es el archivo
+            // "-optimize", que es el que trae por defecto el propio Android Studio.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

@@ -315,7 +315,7 @@ let spotTimer = null;
     // El login es opcional: la práctica se abre directo, como antes. Quien quiera
     // la cuenta (avatar, XP y racha) la pide desde el inicio, y entonces sí se
     // guarda en el navegador.
-    if (state.screen === "login") { root.innerHTML = renderLogin(); startLoginTip(); runSplash(); }
+    if (state.screen === "login") { root.innerHTML = renderLogin(); startLoginTip(); }
     else if (state.screen === "home") root.innerHTML = renderHome();
     else if (state.screen === "settings") root.innerHTML = renderSettings();
     else if (state.screen === "modeConfig") root.innerHTML = renderModeConfig();
@@ -569,14 +569,6 @@ let spotTimer = null;
         </main>
         </div>
       </div>
-      <div id="splash" class="splash" aria-hidden="true">
-        <div class="splash-inner">
-          <img class="splash-logo" src="assets/images/logo.png" alt="">
-          <p class="splash-title">Bienvenido a <strong>SepsLab</strong></p>
-          <p class="splash-sub">Práctica para las Pruebas Saber Pro</p>
-        </div>
-        <div class="splash-bar"><span></span></div>
-      </div>
       <div id="reward-overlay" aria-live="polite"></div>
     `;
   }
@@ -617,14 +609,16 @@ let spotTimer = null;
     else { state = { screen: "home" }; render(); if (pendingStartMode) startModeConfig(pendingStartMode); }
   }
 
-  // Bienvenida: se muestra una sola vez al entrar al login (no si ya hay sesión).
+  // Bienvenida: se muestra una vez al abrir la app y se retira sola. El elemento
+  // viene ya en el index.html con la clase is-on, para que se vea desde el primer
+  // fotograma (si se añadiera con JavaScript, aparecería un destello de la app por
+  // detrás). Aquí solo se programa la salida.
   let splashShown = false;
 
   function runSplash() {
     const el = document.getElementById("splash");
     if (!el || splashShown) return;
     splashShown = true;
-    el.classList.add("is-on");
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     setTimeout(() => {
       el.classList.add("is-out");
@@ -2279,6 +2273,7 @@ function esSesionEnsayo(s) {
     root = document.getElementById("app");
     applyPrefs();
     registerServiceWorker();
+    runSplash();
     root.addEventListener("click", handleClick);
     root.addEventListener("change", handleChange);
     root.addEventListener("input", handleInput);

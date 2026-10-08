@@ -18,6 +18,19 @@
 </head>
 <body>
 <div class="bubbles" aria-hidden="true"><span style="--x:4%;--s:18px;--t:14s;--dl:-2s;--c:cyan"></span><span style="--x:11%;--s:34px;--t:21s;--dl:-11s;--c:white"></span><span style="--x:19%;--s:12px;--t:12s;--dl:-6s;--c:bronze"></span><span style="--x:27%;--s:44px;--t:26s;--dl:-18s;--c:cyan"></span><span style="--x:35%;--s:16px;--t:13s;--dl:-4s;--c:white"></span><span style="--x:43%;--s:28px;--t:19s;--dl:-13s;--c:bronze"></span><span style="--x:51%;--s:10px;--t:11s;--dl:-1s;--c:cyan"></span><span style="--x:59%;--s:38px;--t:24s;--dl:-16s;--c:white"></span><span style="--x:67%;--s:20px;--t:15s;--dl:-8s;--c:bronze"></span><span style="--x:74%;--s:30px;--t:20s;--dl:-5s;--c:cyan"></span><span style="--x:82%;--s:14px;--t:12s;--dl:-10s;--c:white"></span><span style="--x:89%;--s:42px;--t:25s;--dl:-20s;--c:bronze"></span><span style="--x:95%;--s:18px;--t:16s;--dl:-3s;--c:cyan"></span><span style="--x:60%;--s:12px;--t:13s;--dl:-15s;--c:white"></span></div>
+<!-- Splash de bienvenida. Va aquí, y no dentro de una pantalla, porque #app se
+     vacía en cada render: si el splash viviera dentro, desaparecería al cambiar de
+     pantalla. Así sale al abrir la app, tanto en el navegador como en la PWA
+     instalada, y no depende de que haya o no una sesión iniciada. -->
+<div id="splash" class="splash is-on" aria-hidden="true">
+  <div class="splash-inner">
+    <img class="splash-logo" src="assets/images/logo.png" alt="">
+    <p class="splash-title">Bienvenido a <strong>SepsLab</strong></p>
+    <p class="splash-sub">Práctica para las Pruebas Saber Pro</p>
+  </div>
+  <div class="splash-bar"><span></span></div>
+</div>
+
 <div id="app"></div>
 
 <!-- Datos: bancos de preguntas reales + metadata de módulos -->

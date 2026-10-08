@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Fondo del icono adaptativo. Antes era #FFFFFF, el valor por defecto de
+     Capacitor: dejaba el logo morado sobre blanco y se veía como un icono
+     recortado. Ahora es el morado profundo de la tarjeta (el token "surface"
+     del tema oscuro), contra el que el logo, con su contorno blanco, destaca. -->
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="ic_launcher_background">#241733</color>
 </resources>

@@ -2752,7 +2752,7 @@ svg.input-ico {
 
 /* =========================================================
    Splash de bienvenida: logo grande + "Bienvenido a SepsLab"
-   Se muestra una vez al entrar al login y se retira solo.
+   Se muestra una vez al abrir la app y se retira solo.
    ========================================================= */
 .splash {
   position: fixed;
@@ -2841,6 +2841,69 @@ svg.input-ico {
   transform: scaleX(0);
   transform-origin: left;
   background: linear-gradient(90deg, var(--accent), var(--warn));
+}
+
+/* El splash estaba medido para una pantalla de móvil (logo de 148px, textos de
+   ~1rem). Estirado en un monitor de 1440 o 1920 quedaba como una isla diminuta
+   perdida en el centro, con medio ancho de pantalla vacío. En escritorio crece
+   todo con la misma proporción, y los brillos del fondo también se agrandan: si
+   no, el logo se ve grande sobre un fondo que sigue siendo el de un teléfono. */
+@media (min-width: 1000px) {
+  .splash {
+    background-image:
+      radial-gradient(760px 460px at 50% 40%, rgba(147, 51, 234, 0.24), transparent),
+      radial-gradient(620px 380px at 76% 84%, var(--warn-soft), transparent);
+  }
+
+  .splash-logo {
+    width: 208px;
+    height: 208px;
+    margin-bottom: 26px;
+    filter: drop-shadow(0 16px 44px rgba(147, 51, 234, 0.6));
+  }
+
+  .splash-title {
+    font-size: 1.7rem;
+  }
+
+  .splash-title strong {
+    font-size: 2.7rem;
+  }
+
+  .splash-sub {
+    font-size: 0.95em;
+  }
+
+  .splash-bar {
+    width: 240px;
+    height: 3px;
+    bottom: 68px;
+  }
+}
+
+/* Monitor muy ancho (1920 o más): un segundo escalón, para que la composición no
+   vuelva a quedarse pequeña en una pantalla grande. */
+@media (min-width: 1600px) {
+  .splash-logo {
+    width: 248px;
+    height: 248px;
+  }
+
+  .splash-title {
+    font-size: 1.95rem;
+  }
+
+  .splash-title strong {
+    font-size: 3.1rem;
+  }
+
+  .splash-sub {
+    font-size: 1.05em;
+  }
+
+  .splash-bar {
+    width: 290px;
+  }
 }
 
 .splash.is-on .splash-logo {

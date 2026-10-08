@@ -7,7 +7,7 @@
 //
 // IMPORTANTE — al cambiar cualquier archivo de app/, hay que subir CACHE aquí:
 // si no, los usuarios con la app instalada seguirían viendo la versión vieja.
-const CACHE = "sesp-v6";
+const CACHE = "sesp-v7";
 
 const SHELL = [
   "./",
@@ -45,6 +45,7 @@ const SHELL = [
   "./assets/images/logo.png",
   "./assets/images/icon-192.png",
   "./assets/images/icon-512.png",
+  "./assets/images/icon-maskable-512.png",
 
   // Las tipografías van en el shell porque sin ellas la app abre con una serif
   // del sistema y cambia por completo al pasar de "sin datos" a "con datos".
